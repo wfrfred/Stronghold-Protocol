@@ -3,7 +3,6 @@ import { test } from "node:test";
 import { actionDefinition, battle, unit } from "../helpers/action-fixture.js";
 import { getUnit, transitionUnit } from "../../dist/core/tactical/battle/state.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import {
     setBeforeReleaseHook,
     removeBeforeReleaseHook,
@@ -52,7 +51,7 @@ function releaseEffect(id, data, invoke) {
 const attach = (state, definition) =>
     effects.install(state, unitRef(getUnit(state, 0)), definition);
 const change = (state, ref, data) =>
-    effects.replaceEffect(state, ref, setData(effects.get(state, ref), data));
+    effects.update(state, ref, () => data);
 
 test("action release: ordinary and disabled effects continue without executing disabled hooks", () => {
     const started = initial();

@@ -45,15 +45,6 @@ export function ref<E extends View>(effect: E): Ref<E> {
     return { host: effect.host, id: effect.id } as Ref<E>;
 }
 
-export function setData<S extends object, H extends object>(
-    effect: Effect<S, H>,
-    next: NoInfer<S> | ((current: NoInfer<S>) => NoInfer<S>),
-): Effect<S, H> {
-    const data = typeof next === "function" ? next(effect.data) : next;
-
-    return data === effect.data ? effect : { ...effect, data };
-}
-
 export function setDeadline<S extends object, H extends object>(
     effect: Effect<S, H>,
     tick: number | null,

@@ -14,7 +14,7 @@ import { createDefinition as createProjectileDefinition } from "../../dist/core/
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { create as createAttack } from "../../dist/content/tactical/actions/skill.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
-import { ref as actionRef, setState } from "../../dist/core/tactical/unit/action/action.js";
+import { ref as actionRef } from "../../dist/core/tactical/unit/action/action.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
@@ -223,7 +223,7 @@ test("ammo runtime: a content-defined follow-up preserves one ammunition payment
         state = normal.step(state, self).state;
         const current = actions.get(state, actionRef(self));
         if (current === undefined) return { state, value: true };
-        return { state: actions.replace(state, setState(current, { ...current.state, emitted: 1 })), value: false };
+        return { state: actions.update(state, actionRef(current), currentState => ({ ...currentState, emitted: 1 })), value: false };
       }
       for (const target of self.state.bindings.main) {
         state = dealDamage(state, { source: { id: self.host.id }, target: { id: target.id }, parameters: parameters(resolveAttack(state, self.host), "TRUE") }).state;

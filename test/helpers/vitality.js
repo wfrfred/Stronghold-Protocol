@@ -1,4 +1,3 @@
-import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { initialize } from "./unit.js";
 import { transitionUnit, getUnit, battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
@@ -62,11 +61,8 @@ export function setSelf(state, context, self, next) {
     const current = unit && unit.effects.get(self.id, self.definition);
     return current === undefined
         ? state
-        : effects.replaceEffect(
-              state,
-              { host: current.host, id: current.id },
-              setData(current, next),
-          );
+        : effects.update(state, { host: current.host, id: current.id },
+              typeof next === "function" ? next : () => next);
 }
 
 export function current(state, context, self) {

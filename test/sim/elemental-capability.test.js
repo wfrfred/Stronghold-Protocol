@@ -188,10 +188,10 @@ const epShield = (id, budget) => ({
       invoke(current, _context, amount) {
         const self = effects.get(current, address);
         const blocked = Math.min(amount, self.data.remaining);
-        current = effects.replaceEffect(current, address, {
-          ...self,
-          data: { remaining: self.data.remaining - blocked },
-        });
+        current = effects.update(current, address, data => ({
+          ...data,
+          remaining: data.remaining - blocked,
+        }));
         return { state: current, value: amount - blocked };
       },
     }));

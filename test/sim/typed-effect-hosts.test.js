@@ -88,7 +88,7 @@ import type { Vitality } from ${source("unit/capability/vitality/capability")};
 import type { Definition } from ${source("unit/effect/definition")};
 import { ref as effectRef, type Effect, type View } from ${source("unit/effect/effect")};
 import { Effects } from ${source("unit/effect/effects")};
-import { install } from ${source("unit/effect/operations")};
+import { install, update } from ${source("unit/effect/operations")};
 declare const battle: BattleState;
 declare const complete: Ref<Unit & Locomotion & Vitality>;
 declare const movement: Ref<Unit & Locomotion>;
@@ -114,6 +114,11 @@ const generic: Ref<View> = reference;
 const entries = Effects.empty().add(effect);
 const restored: typeof effect | undefined = entries.get(reference);
 entries.replace(reference, { ...effect, data: { charges: 2 } });
+update(battle, reference, data => ({ ...data, charges: data.charges + 1 }));
+// @ts-expect-error public references do not prove the private data transform type.
+update(battle, generic, data => data);
+// @ts-expect-error precise data fields retain their type through transforms.
+update(battle, reference, data => ({ ...data, charges: "wrong" }));
 // @ts-expect-error public effect identity does not retain arbitrary host capabilities.
 const inventedHost: Ref<Unit & Vitality> = generic.host;
 // @ts-expect-error public effect views hide private data.

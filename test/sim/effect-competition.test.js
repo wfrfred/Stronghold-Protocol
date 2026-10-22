@@ -1,6 +1,5 @@
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialize } from "../helpers/unit.js";
@@ -54,11 +53,7 @@ test("effect groups: replacing the selected rule withdraws old output and restor
     assert.equal(get(battle, first).enabled, true);
     assert.equal(get(battle, second).status, "ACTIVE");
     assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 0))), 150);
-    battle = effect.replaceEffect(
-        battle,
-        first,
-        setData(get(battle, first), { amount: 30 }),
-    );
+    battle = effect.update(battle, first, data => ({ amount: 30 }));
     battle = effect.end(battle, second);
     assert.equal(get(battle, first).status, "ACTIVE");
     assert.equal(get(battle, first).data.amount, 30);

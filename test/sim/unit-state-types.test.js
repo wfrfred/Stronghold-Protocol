@@ -28,8 +28,8 @@ import type { Locomotion } from ${module("unit/capability/locomotion/capability"
 import { setSpeedContribution } from ${module("unit/capability/locomotion/operations")};
 import type { Route, Progress } from ${module("unit/capability/route/capability")};
 import type { Context, Definition } from ${module("unit/effect/definition")};
-import { install, replaceEffect, get } from ${module("unit/effect/operations")};
-import { setData, type Effect } from ${module("unit/effect/effect")};
+import { install, update, get } from ${module("unit/effect/operations")};
+import type { Effect } from ${module("unit/effect/effect")};
 import { Effects } from ${module("unit/effect/effects")};
 import type { Contribution } from ${module("unit/contribution/contribution")};
 import type { Modifier, Input } from ${module("unit/contribution/attribute")};
@@ -39,14 +39,13 @@ const content: Definition<{charges:number},Vitality> = {
  id:'shield',initialize:()=>({charges:2}),
  onTick(state,context) {
    const hp:number=context.unit.vitality.hp;
-   const next=setData(context.self,current=>({charges:current.charges-1}));
    // @ts-expect-error private state remains specific to this definition.
-   setData(context.self,{missing:1});
+   update(state,context.ref,()=>({missing:1}));
    // @ts-expect-error stored values are readonly.
    context.self.status='ENDING';
    // @ts-expect-error shared host state must use immutable transitions.
    context.unit.vitality.hp=hp;
-   return replaceEffect(state,context.ref,next);
+   return update(state,context.ref,current=>({charges:current.charges-1}));
  }
 };
 declare const battle:BattleState;
@@ -60,9 +59,9 @@ if(ref!==undefined) {
  if(found!==undefined){
    const charges:number=found.data.charges;
    const typed:Effect<{charges:number},Vitality>=found;
-   setData(found,{charges:5});
+   update(battle,ref,()=>({charges:5}));
    // @ts-expect-error state transitions preserve the Effect's private state type.
-   setData(found,{charges:'five'});
+   update(battle,ref,()=>({charges:'five'}));
  }
 }
 declare const shield:Effect<{charges:number},Vitality>;

@@ -1,3 +1,4 @@
+import { ref as actionRef } from "../../dist/core/tactical/unit/action/action.js";
 import { setRule } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -5,7 +6,6 @@ import { battle, unit } from "../helpers/action-fixture.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
-import { setState } from "../../dist/core/tactical/unit/action/action.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { advance } from "../../dist/core/tactical/unit/action/advance.js";
 
@@ -55,30 +55,32 @@ test("action storage: replacements preserve earlier instances and never recreate
         source = unitRef(getUnit(initial, 0));
     const started = actions.start(initial, source, definition),
         self = actions.get(started.state, started.value.ref);
-    const changed = actions.replace(started.state, setState(self, { count: 1 }));
+    const changed = actions.update(started.state, actionRef(self), () => ({ count: 1 }));
     assert.equal(actions.get(changed, started.value.ref).state.count, 1);
     assert.equal(actions.get(started.state, started.value.ref).state.count, 0);
     const cancelled = actions.cancel(changed, started.value.ref, "SCRIPT");
-    assert.equal(actions.replace(cancelled, self), cancelled);
+    assert.equal(actions.update(cancelled, actionRef(self), () => assert.fail("ended Action updated")), cancelled);
     const restarted = actions.start({ ...cancelled, tick: 10 }, source, definition);
     assert.equal(restarted.value.type, "STARTED");
     assert.notEqual(restarted.value.ref.id, started.value.ref.id);
     assert.equal(actions.get(restarted.state, started.value.ref), undefined);
 });
 
-test("action storage: replacing state cannot change its fixed definition association", () => {
+test("action storage: private state updates cannot change the fixed definition association", () => {
     const definition = program("fixed"),
         other = program("fixed");
     const initial = battle(unit(0, { action: definition }));
     const started = actions.start(initial, unitRef(getUnit(initial, 0)), definition);
     const self = actions.get(started.state, started.value.ref);
-    assert.throws(() => actions.replace(started.state, { ...self, definition: other }), TypeError);
+    const changed = actions.update(started.state, actionRef(self), current => ({ ...current, definition: other }));
+    assert.equal(actions.get(changed, started.value.ref).definition, definition);
+    assert.equal(actions.get(changed, started.value.ref).state.definition, other);
     assert.equal(actions.get(started.state, started.value.ref), self);
 });
 
 test("action storage: a throwing later instance cannot mutate earlier published progress", () => {
     const advanceCount = (state, self) => ({
-        state: actions.replace(state, setState(self, { count: self.state.count + 1 })),
+        state: actions.update(state, actionRef(self), currentState => ({ count: currentState.count + 1 })),
         value: false,
     });
     const first = program("first", { step: advanceCount });
@@ -107,7 +109,7 @@ test("action: startup rules prohibit new instances while an accepted program kee
     const first = program("running", {
         step(state, self) {
             return {
-                state: actions.replace(state, setState(self, { count: self.state.count + 1 })),
+                state: actions.update(state, actionRef(self), currentState => ({ count: currentState.count + 1 })),
                 value: state.tick >= 1,
             };
         },

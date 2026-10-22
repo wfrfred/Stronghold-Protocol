@@ -63,8 +63,7 @@ import {
 } from "../../../core/tactical/unit/capability/vitality/capability.js";
 import { removeHook, setHook } from "../../../core/tactical/battle/damage/hook.js";
 import type { Definition as EffectDefinition } from "../../../core/tactical/unit/effect/definition.js";
-import { setData } from "../../../core/tactical/unit/effect/effect.js";
-import { get, install, replaceEffect } from "../../../core/tactical/unit/effect/operations.js";
+import { get, install, update } from "../../../core/tactical/unit/effect/operations.js";
 
 export interface Definition extends OperatorDefinition {
     readonly elemental: ElementalDefinition;
@@ -171,8 +170,8 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
     const definition: EffectDefinition<ShieldState, Vitality> = {
         id: SHIELD_ID,
         initialize: () => ({ layers: initialLayers, timer: interval, lastTick: 0 }),
-        onInstall: (state, { self, ref, tick }) =>
-            replaceEffect(state, ref, setData(self, { ...self.data, lastTick: tick })),
+        onInstall: (state, { ref, tick }) =>
+            update(state, ref, (data) => ({ ...data, lastTick: tick })),
         onEnable: (state, { unit, ref, self }) =>
             updateUnit(state, {
                 ...unit,
@@ -192,14 +191,10 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
                             return { state, value: pending };
                         }
                         if (shield.data.layers > 0) {
-                            state = replaceEffect(
-                                state,
-                                ref,
-                                setData(shield, {
-                                    ...shield.data,
-                                    layers: shield.data.layers - 1,
-                                }),
-                            );
+                            state = update(state, ref, (data) => ({
+                                ...data,
+                                layers: data.layers - 1,
+                            }));
                             state = healSelf(state, unit.id, healRatio);
                             const current = getUnit(state, unit.id);
 
@@ -255,15 +250,12 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
             const remaining = self.data.timer - elapsed;
             const pulses = remaining <= 0 ? Math.floor(-remaining / interval) + 1 : 0;
 
-            return replaceEffect(
-                state,
-                ref,
-                setData(self, {
-                    layers: Math.min(capacity, self.data.layers + pulses),
-                    timer: remaining + pulses * interval,
-                    lastTick: tick,
-                }),
-            );
+            return update(state, ref, (data) => ({
+                ...data,
+                layers: Math.min(capacity, data.layers + pulses),
+                timer: remaining + pulses * interval,
+                lastTick: tick,
+            }));
         },
     };
 

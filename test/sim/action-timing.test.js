@@ -1,3 +1,4 @@
+import { ref as actionRef } from "../../dist/core/tactical/unit/action/action.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { battle, unit } from "../helpers/action-fixture.js";
@@ -16,7 +17,6 @@ import {
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import { create as modifier } from "../../dist/core/tactical/unit/contribution/attribute.js";
-import { setState } from "../../dist/core/tactical/unit/action/action.js";
 import { advance } from "../../dist/core/tactical/unit/action/advance.js";
 
 const program = (id = "timed", extra = {}) => ({
@@ -151,10 +151,7 @@ test("action timing: a period change does not rescale an accepted private castin
         step(state, self) {
             if (state.tick >= self.state.finishAtTick) return { state, value: true };
             return {
-                state: actions.replace(
-                    state,
-                    setState(self, { ...self.state, observed: self.state.observed + 1 }),
-                ),
+                state: actions.update(state, actionRef(self), currentState => ({ ...currentState, observed: currentState.observed + 1 })),
                 value: false,
             };
         },

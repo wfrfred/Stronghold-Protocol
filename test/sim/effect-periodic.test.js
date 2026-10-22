@@ -1,5 +1,4 @@
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialize } from "../helpers/unit.js";
@@ -23,11 +22,10 @@ test("effect time: content controls periodic intervals and state is visible befo
         {
             onTick(state, context) {
                 if (context.tick < context.self.data.nextTick) return state;
-                const next = setData(context.self, (current) => ({
+                state = effect.update(state, context.ref, (current) => ({
                     nextTick: context.tick + 3,
                     count: current.count + 1,
                 }));
-                state = effect.replaceEffect(state, context.ref, next);
                 seen.push([context.tick, get(state, context.ref).data.count]);
                 return state;
             },
@@ -67,11 +65,7 @@ test("effect time: periodic progress pauses while inactive and resumes from the 
         {
             onTick(state, context) {
                 const progress = context.self.data.progress + 1;
-                state = effect.replaceEffect(
-                    state,
-                    context.ref,
-                    setData(context.self, { progress: progress === 5 ? 0 : progress }),
-                );
+                state = effect.update(state, context.ref, data => ({ progress: progress === 5 ? 0 : progress }));
 
                 if (progress === 5) triggered.push(context.tick);
                 return state;
@@ -117,11 +111,7 @@ test("effect time: a new Effect waits for the next advance while ended candidate
             onTick(state, context) {
                 seen.push("first");
                 if (context.self.data.spawned) return state;
-                state = effect.replaceEffect(
-                    state,
-                    context.ref,
-                    setData(context.self, { spawned: true }),
-                );
+                state = effect.update(state, context.ref, data => ({ spawned: true }));
                 state = effect.install(
                     state,
                     unitRef(getUnit(state, context.unit.id)),
@@ -157,13 +147,9 @@ test("effect time: zero shield charges do not suspend the periodic recharge Effe
         { charges: 0 },
         {
             onTick(state, context) {
-                return effect.replaceEffect(
-                    state,
-                    context.ref,
-                    setData(context.self, (current) => ({
+                return effect.update(state, context.ref, (current) => ({
                         charges: Math.min(3, current.charges + 1),
-                    })),
-                );
+                    }));
             },
         },
     );

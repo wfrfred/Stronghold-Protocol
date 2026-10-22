@@ -1,10 +1,10 @@
-import { setDeadline, setData } from "../../dist/core/tactical/unit/effect/effect.js";
+import { setDeadline } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialize } from "../helpers/unit.js";
 import * as effect from "../../dist/core/tactical/unit/effect/operations.js";
 import { get } from "../../dist/core/tactical/unit/effect/operations.js";
-import { effectFixtureWork, install, definition, at } from "../helpers/effects.js";
+import { effectFixtureWork, install, definition, at, replaceEffectFixture } from "../helpers/effects.js";
 
 const unit = () =>
     initialize({
@@ -58,13 +58,11 @@ test("effect deadlines: layered content renews the same identity and ends only a
                     return effect.end(state, context.ref, "LAYERS_EXHAUSTED");
                 }
                 const deadline = context.tick + 2;
-                return effect.replaceEffect(
+                state = effect.update(state, context.ref, data => ({ ...data, layers, deadline }));
+                return replaceEffectFixture(
                     state,
                     context.ref,
-                    setDeadline(
-                        setData(context.self, { layers, deadline }),
-                        deadline,
-                    ),
+                    setDeadline(get(state, context.ref), deadline),
                 );
             },
         },
@@ -88,7 +86,7 @@ test("effect deadlines: current scopes are read after an earlier callback renews
         {},
         {
             onTick(state) {
-                return effect.replaceEffect(
+                return replaceEffectFixture(
                     state,
                     later,
                     setDeadline(get(state, later), 10),
@@ -111,7 +109,7 @@ test("effect deadlines: removing a deadline keeps an otherwise active instance a
     ({ state: battle, value: ref } = install(battle, definition("permanent"), 0, {
         scopes: [{ type: "TICK", tick: 1 }],
     }));
-    battle = effect.replaceEffect(battle, ref, setDeadline(get(battle, ref), null));
+    battle = replaceEffectFixture(battle, ref, setDeadline(get(battle, ref), null));
     battle = effect.advance(at(battle, 100));
     assert.equal(get(battle, ref).status, "ACTIVE");
 });

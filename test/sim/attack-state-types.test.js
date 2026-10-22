@@ -14,8 +14,8 @@ test("Attack persistent and execution data keep separate types and typed activat
         writeFileSync(path, `
 import type { Ref } from ${source("core/common/ref")};
 import type { State as BattleState, Result } from ${source("core/tactical/battle/state")};
-import { ref as actionRef, setState } from ${source("core/tactical/unit/action/action")};
-import { replace, getState, replaceState } from ${source("core/tactical/unit/action/operations")};
+import { ref as actionRef } from ${source("core/tactical/unit/action/action")};
+import { update, getState, replaceState } from ${source("core/tactical/unit/action/operations")};
 import type { Activation } from ${source("core/tactical/unit/capability/skill/activation")};
 import { get as getActivation } from ${source("core/tactical/unit/capability/skill/query")};
 import { consume, check } from ${source("core/tactical/unit/capability/skill/ammo")};
@@ -37,7 +37,7 @@ const counted = createWithState({
         const persistent = getState(current, self.host, self.definition)!;
         const count: number = persistent.data.count;
         current = replaceState(current, self.host, { ...persistent, data: { count: count + 1 } });
-        return replace(current, setState(self, { ...self.state, data: { sampled: count } }));
+        return update(current, actionRef(self), state => ({ ...state, data: { sampled: count } }));
     },
     afterOutput(current, self) {
         const sampled: number = self.state.data.sampled;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
-import { ref, setData } from "../../dist/core/tactical/unit/effect/effect.js";
+import { ref } from "../../dist/core/tactical/unit/effect/effect.js";
 import { project, derive, dependents } from "../../dist/core/tactical/battlefield/storage/effect-lifetimes.js";
 
 function instance(id, definition, data = definition.initialize(), host = { id: 0 }) {
@@ -25,7 +25,7 @@ test("Effect Store queries preserve old versions and replacement retains registr
     const original = Effects.empty().add(first).add(second);
     const oldKeys = original.keys();
     const oldValues = original.values();
-    const consumed = setData(first, { charges: 1 });
+    const consumed = { ...first, data: { charges: 1 } };
     const updated = original.replace(ref(first), consumed);
     const removed = updated.remove(0);
     const third = instance(2, shield);

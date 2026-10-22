@@ -56,6 +56,13 @@ export function at(state, tick) {
     return { ...state, tick };
 }
 
+export function replaceEffectFixture(state, reference, self) {
+    return transitionUnit(state, reference.host.id, unit => {
+        const next = unit.effects.replace(reference, self);
+        return next === unit.effects ? unit : { ...unit, effects: next };
+    });
+}
+
 export function attackBuff(id = "attack-buff", amount = 20, callbacks = {}) {
     return contributionBuff(
         id,

@@ -1,7 +1,7 @@
 import { fixtureBattle } from "../helpers/unit.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
-import { deadline, setData, setDeadline } from "../../dist/core/tactical/unit/effect/effect.js";
+import { deadline, setDeadline } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -52,6 +52,7 @@ import {
     maxHpBuff,
     at,
     effectFixtureWork,
+    replaceEffectFixture,
 } from "../helpers/effects.js";
 
 const fixtures = JSON.parse(
@@ -94,16 +95,7 @@ const install = (work, effect, expiresAtTick = null) =>
         scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
     });
 const change = (work, effect, next, setting) => {
-    work = effects.replaceEffect(
-        work,
-        effectAddress,
-        setData(
-            getUnit(work, effectAddress.host.id).effects.values().toArray().find(
-                (instance) => instance.id === effectAddress.id,
-            ),
-            next,
-        ),
-    );
+    work = effects.update(work, effectAddress, data => ({ ...data, ...next }));
     return refreshContribution(work, effectAddress, effect, setting);
 };
 const entry = (id, value) => ({ id, value: [value] });
@@ -448,14 +440,15 @@ test("blocking capacity: native stack renewal and terminal cleanup update real b
                 if (plan.type === "FINISH")
                     return effects.end(state, ctx.ref, "EXPIRED");
                 else {
-                    const next = setDeadline(
-                        setData(ctx.self, (current) => ({
-                            ...current,
-                            stackCount: plan.stackCount,
-                        })),
-                        plan.expiresAtTick,
+                    state = effects.update(state, ctx.ref, data => ({
+                        ...data,
+                        stackCount: plan.stackCount,
+                    }));
+                    state = replaceEffectFixture(
+                        state,
+                        ctx.ref,
+                        setDeadline(effects.get(state, ctx.ref), plan.expiresAtTick),
                     );
-                    state = effects.replaceEffect(state, ctx.ref, next);
                     return refreshContribution(state, ctx.ref, content, setting);
                 }
             },

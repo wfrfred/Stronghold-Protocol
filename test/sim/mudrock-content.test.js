@@ -14,8 +14,7 @@ import {
     createBattleState, battlefieldView, getUnit, updateUnit,
 } from "../../dist/core/tactical/battle/state.js";
 import { enter } from "../../dist/core/tactical/battle/execution/unit.js";
-import { advance, end, get, install, replaceEffect } from "../../dist/core/tactical/unit/effect/operations.js";
-import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
+import { advance, end, get, install, update as updateEffect } from "../../dist/core/tactical/unit/effect/operations.js";
 import { setHook, removeHook } from "../../dist/core/tactical/battle/damage/hook.js";
 import { activate as activateSkill, advance as advanceSkill, finish as finishSkill } from "../../dist/core/tactical/unit/capability/skill/operations.js";
 import { start, cancel } from "../../dist/core/tactical/unit/action/operations.js";
@@ -128,7 +127,7 @@ test("an earlier barrier exhausts its budget without consuming Mudrock's shield 
                     const current = get(state, ref);
                     const absorbed = Math.min(current.data.remaining, pending.amount);
                     const remaining = current.data.remaining - absorbed;
-                    state = replaceEffect(state, ref, setData(current, { remaining }));
+                    state = updateEffect(state, ref, data => ({ remaining }));
                     if (remaining === 0) state = end(state, ref);
                     return { state, value: { ...pending, amount: pending.amount - absorbed } };
                 },

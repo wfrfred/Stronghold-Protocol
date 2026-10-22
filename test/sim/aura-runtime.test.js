@@ -1,5 +1,4 @@
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
@@ -252,11 +251,7 @@ test("aura runtime: callback failure propagates the original error without publi
     let receiver;
     receiver = attackEffect("fallible-aura-receiver", {
         onInstall: (state, context) => {
-            state = effects.replaceEffect(
-                state,
-                context.ref,
-                setData(context.self, (current) => ({ ...current, starts: 1 })),
-            );
+            state = effects.update(state, context.ref, (current) => ({ ...current, starts: 1 }));
             if (context.ref.host.id === 2) {
                 attempts.push(context.ref);
                 throw failure;

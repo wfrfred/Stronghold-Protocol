@@ -12,7 +12,6 @@ import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.
 import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
-import { setState } from "../../dist/core/tactical/unit/action/action.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 
@@ -76,7 +75,7 @@ const program = (id, extra = {}) => ({
 test("action runtime: a newly registered instance first executes once and retained snapshots stay immutable", () => {
     const definition = program("progress", {
         step(state, self) {
-            state = actions.replace(state, setState(self, { count: self.state.count + 1 }));
+            state = actions.update(state, actionRef(self), currentState => ({ count: currentState.count + 1 }));
             return { state, value: false };
         },
     });
@@ -215,7 +214,7 @@ test("action runtime: a late exception publishes neither progressed action state
     const definition = program("failure", {
         step(state, self) {
             if (state.tick === 0) return { state, value: false };
-            state = actions.replace(state, setState(self, { count: 9 }));
+            state = actions.update(state, actionRef(self), () => ({ count: 9 }));
             state = updateUnit(state, { ...getUnit(state, 1), position: [3, 0] });
             throw failure;
         },

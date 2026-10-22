@@ -11,7 +11,7 @@ import {
 } from "../../../core/tactical/battle/state.js";
 import type { Unit } from "../../../core/tactical/unit/unit.js";
 import * as units from "../../../core/tactical/unit/query.js";
-import { ref, setState, type Action } from "../../../core/tactical/unit/action/action.js";
+import { ref, type Action } from "../../../core/tactical/unit/action/action.js";
 import type { Definition as ActionDefinition } from "../../../core/tactical/unit/action/definition.js";
 import type { State as ActionState } from "../../../core/tactical/unit/action/state.js";
 import * as actions from "../../../core/tactical/unit/action/operations.js";
@@ -327,8 +327,11 @@ export function createWithState<P extends object, E extends object>(
                     });
                 }
 
-                self = setState(self, { ...self.state, cooldownAdjusted: true });
-                battle = actions.replace(battle, self);
+                battle = actions.update(battle, identity, (current) => ({
+                    ...current,
+                    cooldownAdjusted: true,
+                }));
+                self = actions.get(battle, identity) ?? self;
                 battle = appendEvents(battle, [
                     {
                         type: "ACTION",
@@ -340,7 +343,10 @@ export function createWithState<P extends object, E extends object>(
             }
 
             if (!self.state.released && battle.tick >= self.state.releaseAtTick) {
-                battle = actions.replace(battle, setState(self, { ...self.state, released: true }));
+                battle = actions.update(battle, identity, (current) => ({
+                    ...current,
+                    released: true,
+                }));
                 const permission = beforeRelease(battle, identity);
                 battle = permission.state;
                 const current = actions.get(battle, identity);

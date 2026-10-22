@@ -1,5 +1,5 @@
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { deadline, setDeadline, setData } from "../../dist/core/tactical/unit/effect/effect.js";
+import { deadline, setDeadline } from "../../dist/core/tactical/unit/effect/effect.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -26,6 +26,7 @@ import {
     refreshContribution,
     at,
     effectFixtureWork,
+    replaceEffectFixture,
 } from "../helpers/effects.js";
 
 const fixtures = JSON.parse(
@@ -88,10 +89,8 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
             }).state;
         } else if (plan.type === "REFRESH") {
             const address = { host: { id: 0 }, id: current.id };
-            const next = setDeadline(setData(current, {
-                ...current.data, stackCount: plan.stackCount,
-            }), plan.expiresAtTick);
-            work = effects.replaceEffect(work, { host: { id: 0 }, id: (next).id }, next);
+            work = effects.update(work, address, data => ({ ...data, stackCount: plan.stackCount }));
+            work = replaceEffectFixture(work, address, setDeadline(effects.get(work, address), plan.expiresAtTick));
             work = refreshContribution(work, address, program, output);
         }
         return plan;
@@ -195,12 +194,12 @@ test("Buff contribution integration: only effective layer growth resamples the r
             tick,
         );
         assert.equal(plan.type, "REFRESH");
-        const next = setDeadline(setData(current, {
-            ...current.data,
+        work = effects.update(work, address, data => ({
+            ...data,
             stackCount: plan.stackCount,
-            sourceAttack: plan.reloadModifiers ? currentSourceAttack : current.data.sourceAttack,
-        }), plan.expiresAtTick);
-        work = effects.replaceEffect(work, { host: { id: 0 }, id: (next).id }, next);
+            sourceAttack: plan.reloadModifiers ? currentSourceAttack : data.sourceAttack,
+        }));
+        work = replaceEffectFixture(work, address, setDeadline(effects.get(work, address), plan.expiresAtTick));
         work = refreshContribution(work, address, program, output);
         return plan;
     };

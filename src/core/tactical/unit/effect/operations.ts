@@ -87,20 +87,28 @@ export function install<S extends object, H extends object>(
     return { state: battle, value: ref };
 }
 
-export function replaceEffect<S extends object, H extends object>(
+export function update<S extends object, H extends object>(
     battle: BattleState,
     ref: Ref<Effect<S, H>>,
-    effect: NoInfer<Effect<S, H>>,
+    transform: (data: NoInfer<S>) => NoInfer<S>,
 ): BattleState {
-    if (ref.id !== effect.id || ref.host.id !== effect.host.id) {
-        throw new TypeError("effect identity mismatch");
+    const unit = units.get(battle, ref.host);
+
+    if (unit === undefined) {
+        return battle;
     }
 
-    return transitionUnit(battle, ref.host.id, (unit) => {
-        const effects = unit.effects.replace(ref, effect);
+    const self = unit.effects.get(ref);
 
-        return effects === unit.effects ? unit : { ...unit, effects };
-    });
+    if (self === undefined) {
+        return battle;
+    }
+
+    const data = transform(self.data);
+
+    return data === self.data
+        ? battle
+        : updateUnit(battle, { ...unit, effects: unit.effects.replace(ref, { ...self, data }) });
 }
 
 export function setEnabled(battle: BattleState, ref: Ref<View>, enabled: boolean): BattleState {
@@ -308,10 +316,18 @@ function change(
         readonly scopes?: readonly Scope[];
     },
 ): BattleState {
-    return (
-        getUnit(battle, ref.host.id)?.effects.read(ref.id, (instance) =>
-            replaceEffect(battle, effectRef(instance), { ...instance, ...changes }),
-        ) ?? battle
+    return transitionUnit(
+        battle,
+        ref.host.id,
+        (unit) =>
+            unit.effects.read(ref.id, (instance) => {
+                const effects = unit.effects.replace(effectRef(instance), {
+                    ...instance,
+                    ...changes,
+                });
+
+                return effects === unit.effects ? unit : { ...unit, effects };
+            }) ?? unit,
     );
 }
 

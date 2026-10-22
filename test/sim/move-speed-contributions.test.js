@@ -5,7 +5,6 @@ import { fixtureBattle } from "../helpers/unit.js";
 import { contributionEffect, refreshContribution } from "../helpers/effects.js";
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import {
     battlefieldView,
     getUnit,
@@ -75,8 +74,8 @@ const install = (work, program, expiresAtTick = null) =>
     effects.install(work, unitRef(getUnit(work, 0)), program, {
         scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
     });
-const changeSpeed = (work, program, next) => {
-    work = effects.replaceEffect(work, address, setData(effects.get(work, address), next));
+const changeSpeed = (work, program, transform) => {
+    work = effects.update(work, address, transform);
     return refreshContribution(work, address, program, output);
 };
 function speed(work) {

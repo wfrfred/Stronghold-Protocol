@@ -1,5 +1,5 @@
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { deadline, setDeadline, setData } from "../../dist/core/tactical/unit/effect/effect.js";
+import { deadline, setDeadline } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -21,6 +21,7 @@ import {
     refreshContribution,
     at,
     effectFixtureWork,
+    replaceEffectFixture,
 } from "../helpers/effects.js";
 
 const fixture = JSON.parse(
@@ -145,12 +146,16 @@ function harness({ stackCount = 3, maxValidStackCnt = -1 } = {}) {
                     ctx.self.data.lifetimeTicks, ctx.tick,
                 );
                 if (plan.type === "FINISH") return effects.end(state, ctx.ref, "EXPIRED");
-                const next = setDeadline(setData(ctx.self, {
-                    ...ctx.self.data,
+                state = effects.update(state, ctx.ref, data => ({
+                    ...data,
                     stackCount: plan.stackCount,
-                    sample: plan.reloadModifiers ? sample(plan.stackCount) : ctx.self.data.sample,
-                }), plan.expiresAtTick);
-                state = effects.replaceEffect(state, ctx.ref, next);
+                    sample: plan.reloadModifiers ? sample(plan.stackCount) : data.sample,
+                }));
+                state = replaceEffectFixture(
+                    state,
+                    ctx.ref,
+                    setDeadline(effects.get(state, ctx.ref), plan.expiresAtTick),
+                );
                 return refreshContribution(state, ctx.ref, content, output);
             },
         },

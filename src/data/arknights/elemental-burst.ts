@@ -2,7 +2,7 @@ import type { Ref } from "../../core/common/ref.js";
 import { updateUnit, type State as BattleState } from "../../core/tactical/battle/state.js";
 import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";
 import * as units from "../../core/tactical/unit/query.js";
-import { ref as effectRef, setData } from "../../core/tactical/unit/effect/effect.js";
+import { ref as effectRef } from "../../core/tactical/unit/effect/effect.js";
 import type { Definition as EffectDefinition } from "../../core/tactical/unit/effect/definition.js";
 import * as effects from "../../core/tactical/unit/effect/operations.js";
 import {
@@ -108,7 +108,7 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
                             .effects.get(effectId, paralysis)!;
                         const ref = effectRef(self);
                         const remaining = self.data.remaining - 1;
-                        battle = effects.replaceEffect(battle, ref, setData(self, { remaining }));
+                        battle = effects.update(battle, ref, (data) => ({ ...data, remaining }));
 
                         if (remaining === 0) {
                             battle = effects.end(battle, ref, "EXPLICIT");
@@ -175,11 +175,11 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
             );
             const previousSecond = Math.floor((self.data.elapsedTicks + 1e-8) / TICKS_PER_SECOND);
             const currentSecond = Math.floor((elapsedTicks + 1e-8) / TICKS_PER_SECOND);
-            battle = effects.replaceEffect(
-                battle,
-                ref,
-                setData(self, { ...self.data, elapsedTicks, lastAdvancedTick: battle.tick }),
-            );
+            battle = effects.update(battle, ref, (data) => ({
+                ...data,
+                elapsedTicks,
+                lastAdvancedTick: battle.tick,
+            }));
 
             for (let second = previousSecond + 1; second <= currentSecond; second++) {
                 let unit = activeHost(battle, scope.ref);
@@ -211,11 +211,7 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
                     const scaler =
                         1 -
                         profile.attackReductionRatio * Math.max(0, 1 - second / durationSeconds);
-                    battle = effects.replaceEffect(
-                        battle,
-                        ref,
-                        setData(current, { ...current.data, scaler }),
-                    );
+                    battle = effects.update(battle, ref, (data) => ({ ...data, scaler }));
                     const host = activeHost(battle, scope.ref)!;
 
                     if (!hasOffense(host)) {
@@ -303,11 +299,10 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
                     battle = effects.install(battle, units.ref(unit), paralysis).state;
                 } else {
                     const current = unit.effects.get(existing.id, paralysis)!;
-                    battle = effects.replaceEffect(
-                        battle,
-                        effectRef(current),
-                        setData(current, { remaining: profile.paralysisStacks }),
-                    );
+                    battle = effects.update(battle, effectRef(current), (data) => ({
+                        ...data,
+                        remaining: profile.paralysisStacks,
+                    }));
                 }
             }
 

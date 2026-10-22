@@ -1,6 +1,5 @@
 import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
@@ -60,7 +59,7 @@ function fixture() {
                         accepts: (battle, context) => getUnit(battle, context.request.target.id)?.effects.values().toArray().find(effect => effect.id === ref.id)?.status === "ACTIVE",
                         invoke(state, context, value) {
                             const current = get(state, ref);
-                            state = effects.replaceEffect(state, ref, setData(current, { consumed: current.data.consumed + 1 }));
+                            state = effects.update(state, ref, data => ({ consumed: data.consumed + 1 }));
                             return { state, value };
                         },
                     }) }),

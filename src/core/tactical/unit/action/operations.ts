@@ -174,28 +174,30 @@ export function start<P extends object, E extends object>(
     return { state: advance(battle, reference), value: { type: "STARTED", ref: reference } };
 }
 
-export function replace<P extends object, E extends object>(
+export function update<P extends object, E extends object>(
     battle: BattleState,
-    self: Action<P, E>,
+    reference: Ref<Action<P, E>>,
+    transform: (current: NoInfer<E>) => NoInfer<E>,
 ): BattleState {
-    const unit = units.get(battle, self.host);
-    const current = unit?.action.instances.get(self.id);
+    const unit = units.get(battle, reference.host);
+    const current = unit?.action.instances.get(reference);
 
-    if (
-        unit === undefined ||
-        current === undefined ||
-        current.status === "ENDING" ||
-        current === self
-    ) {
+    if (unit === undefined || current === undefined || current.status === "ENDING") {
         return battle;
     }
-    if (self.status !== current.status) {
-        throw new TypeError("action lifecycle is managed by execution");
+
+    const state = transform(current.state);
+
+    if (state === current.state) {
+        return battle;
     }
 
     return updateUnit(battle, {
         ...unit,
-        action: { ...unit.action, instances: unit.action.instances.replace(ref(self), self) },
+        action: {
+            ...unit.action,
+            instances: unit.action.instances.replace(reference, { ...current, state }),
+        },
     });
 }
 

@@ -23,9 +23,9 @@ import type { Action as ActionCapability } from ${source("tactical/unit/capabili
 import type { Action, View } from ${source("tactical/unit/action/action")};
 import { Actions } from ${source("tactical/unit/action/actions")};
 import type { Definition } from ${source("tactical/unit/action/definition")};
-import { ref, setState } from ${source("tactical/unit/action/action")};
+import { ref } from ${source("tactical/unit/action/action")};
 import { Definitions } from ${source("tactical/unit/action/definitions")};
-import { all, start, get, cancel, replace, getState, replaceState } from ${source("tactical/unit/action/operations")};
+import { all, start, get, cancel, update, getState, replaceState } from ${source("tactical/unit/action/operations")};
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
 declare const battle: BattleState;
@@ -36,7 +36,7 @@ const definition: Definition<object, { count: number }> = {
     id: "count", intervalTicks: 10, speed: 100,
     initialize: current => ({ state: current, value: {} }),
     start: current => ({ state: current, value: { count: 0 } }),
-    step: (current, self) => ({ state: replace(current, setState(self, { count: self.state.count + 1 })), value: false }),
+    step: (current, self) => ({ state: update(current, ref(self), state => ({ count: state.count + 1 })), value: false }),
 };
 const definitions = Definitions.empty().add(definition);
 const recoveredDefinition = definitions.get("count", definition);
@@ -60,7 +60,7 @@ const entries = Actions.empty().add(action);
 const publicEntries: Query<View> = entries.values();
 const exactEntry = entries.get(known);
 type ExactEntry = Assert<Equal<typeof exactEntry, Action<object, { count: number }> | undefined>>;
-entries.replace(known, setState(action, { count: 1 }));
+entries.replace(known, { ...action, state: { count: 1 } });
 // @ts-expect-error public views cannot be inserted as complete instances.
 entries.add(get(battle, erased)!);
 // @ts-expect-error public references do not prove writable private state types.
@@ -86,10 +86,18 @@ get(battle, action);
 get(battle, erased)!.definition.step;
 // @ts-expect-error
 get(battle, erased)!.state.count;
-// @ts-expect-error
-setState(action, { count: "invalid" });
-// @ts-expect-error
-replace(battle, { ...action, state: { count: "invalid" } });
+update(battle, known, current => {
+    const count: number = current.count;
+    return { count: count + 1 };
+});
+// @ts-expect-error the reference fixes the execution state returned by the transformer.
+update(battle, known, () => ({ count: "invalid" }));
+// @ts-expect-error public references do not expose a private state to transform.
+update(battle, erased, current => current);
+// @ts-expect-error a Unit reference cannot identify an Action state.
+update(battle, source, () => ({ count: 1 }));
+// @ts-expect-error updates locate instances through their reference rather than an object snapshot.
+update(battle, action, () => ({ count: 1 }));
 const persistent: Definition<{ uses: number }, { target: string }> = {
     id: "persistent", intervalTicks: 10, speed: 100,
     initialize: current => ({ state: current, value: { uses: 0 } }),

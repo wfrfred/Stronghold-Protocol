@@ -1,5 +1,4 @@
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialize } from "../helpers/unit.js";
@@ -39,11 +38,11 @@ test("effects: a direct static definition initializes private state and runs ins
         {
             onInstall(state, context) {
                 assert.equal(get(state, context.ref).definition, value);
-                const next = setData(context.self, (current) => ({
+                state = effect.update(state, context.ref, (current) => ({
                     count: current.count + 1,
                 }));
-                seen.push(["install", next.data.count]);
-                return effect.replaceEffect(state, context.ref, next);
+                seen.push(["install", get(state, context.ref).data.count]);
+                return state;
             },
             onEnable(state, context) {
                 seen.push(["enable", context.self.data.count]);
@@ -73,11 +72,7 @@ test("effects: updates share immutable values and container queries pair a defin
     let ref;
     ({ state: battle, value: ref } = install(battle, value));
     const old = get(battle, ref);
-    battle = effect.replaceEffect(
-        battle,
-        ref,
-        setData(old, (current) => ({ ...current, count: 2 })),
-    );
+    battle = effect.update(battle, ref, (current) => ({ ...current, count: 2 }));
     const current = get(battle, ref);
     assert.equal(current.data.nested, nested);
     assert.equal(old.data.count, 1);
@@ -109,11 +104,7 @@ test("effects: disabling withdraws output while preserving private state and ide
     assert.equal(attack(), 120);
     battle = effect.setEnabled(battle, ref, false);
     assert.equal(attack(), 100);
-    battle = effect.replaceEffect(
-        battle,
-        ref,
-        setData(get(battle, ref), { amount: 30 }),
-    );
+    battle = effect.update(battle, ref, data => ({ amount: 30 }));
     assert.equal(attack(), 100);
     battle = effect.setEnabled(battle, ref, true);
     assert.equal(attack(), 130);
@@ -127,11 +118,7 @@ test("effects: content explicitly refreshes a static contribution after changing
     let ref;
     ({ state: battle, value: ref } = install(battle, value));
     const previous = battle;
-    battle = effect.replaceEffect(
-        battle,
-        ref,
-        setData(get(battle, ref), { amount: 50 }),
-    );
+    battle = effect.update(battle, ref, data => ({ amount: 50 }));
     assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 0))), 120);
     battle = refreshAttack(battle, ref);
     assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 0))), 150);
@@ -178,14 +165,10 @@ test("effects: callbacks read current Unit state after a preceding nested operat
                 return state;
             },
             onTick(state, context) {
-                return effect.replaceEffect(
-                    state,
-                    context.ref,
-                    setData(context.self, {
-                        observedHp: context.unit.vitality.hp,
-                        tick: context.tick,
-                    }),
-                );
+                return effect.update(state, context.ref, () => ({
+                    observedHp: context.unit.vitality.hp,
+                    tick: context.tick,
+                }));
             },
         },
     );

@@ -1,5 +1,4 @@
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -98,14 +97,10 @@ test("ordinary end policies decide each receiver against current state", () => {
                         {},
                     );
                     state = installed.state;
-                    state = effects.replaceEffect(
-                        state,
-                        ctx.ref,
-                        setData(get(state, ctx.ref), (current) => ({
+                    state = effects.update(state, ctx.ref, (current) => ({
                             ...current,
                             bindings: [...current.bindings, { unitId, ref: installed.value }],
-                        })),
-                    );
+                        }));
                 }
                 return state;
             },

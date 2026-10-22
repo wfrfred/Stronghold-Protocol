@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { setData, setDeadline, deadline } from "../../dist/core/tactical/unit/effect/effect.js";
+import { setDeadline, deadline } from "../../dist/core/tactical/unit/effect/effect.js";
 import {
     get,
-    replaceEffect,
+    update,
     validateScopes,
 } from "../../dist/core/tactical/unit/effect/operations.js";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import { initialize } from "../helpers/unit.js";
-import { definition, effectFixtureWork, install } from "../helpers/effects.js";
+import { definition, effectFixtureWork, install, replaceEffectFixture } from "../helpers/effects.js";
 
 const host = () => initialize({ id: 0, position: [0, 0], definition: { id: "values" } });
 
@@ -18,16 +18,15 @@ test("effect values: local no-ops and replacements retain the input version", ()
     const { state, value: ref } = installed;
     const self = get(state, ref);
     assert.equal(getUnit(state, ref.host.id).effects.get(ref.id, definition("identity")), undefined);
-    assert.equal(setData(self, self.data), self);
     assert.equal(setDeadline(self, null), self);
-    assert.equal(replaceEffect(state, ref, self), state);
+    assert.equal(update(state, ref, data => data), state);
     const unit = getUnit(state, 0);
-    const changed = replaceEffect(state, ref, setData(self, { charges: 1 }));
+    const changed = update(state, ref, data => ({ ...data, charges: 1 }));
     assert.equal(get(state, ref).data.charges, 2);
     assert.equal(get(changed, ref).data.charges, 1);
     assert.equal(getUnit(state, 0), unit);
-    assert.throws(() => replaceEffect(state, { ...ref, id: 9 }, self), TypeError);
-    assert.equal(replaceEffect(state, { ...ref, id: 9 }, { ...self, id: 9 }), state);
+    assert.throws(() => unit.effects.replace({ ...ref, id: 9 }, self), TypeError);
+    assert.equal(update(state, { ...ref, id: 9 }, () => { throw new Error("missing Effect transformed"); }), state);
 });
 
 test("effect values: deadline updates preserve lifetime constraints and reject invalid time", () => {
@@ -71,7 +70,7 @@ test("effect deadlines: invalid initial time is rejected before initialization o
     assert.equal(getUnit(state, 0).effects.values().toArray().length, 0);
     const installed = install(state, definition("initial"));
     const self = get(installed.state, installed.value);
-    const invalid = replaceEffect(installed.state, installed.value, {
+    const invalid = replaceEffectFixture(installed.state, installed.value, {
         ...self,
         scopes: [{ type: "TICK", tick: -1 }],
     });

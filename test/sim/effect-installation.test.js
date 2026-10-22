@@ -1,7 +1,6 @@
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
-import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialize } from "../helpers/unit.js";
@@ -41,11 +40,7 @@ test("effect installation: a nested weaker rule does not enable its parent befor
                 {},
             ));
             assert.equal(get(state, context.ref).status, "INSTALLING");
-            state = effect.replaceEffect(
-                state,
-                context.ref,
-                setData(get(state, context.ref), { amount: 100 }),
-            );
+            state = effect.update(state, context.ref, data => ({ amount: 100 }));
             trace.push("install end");
             return state;
         },
@@ -75,11 +70,7 @@ for (const grouped of [false, true]) {
                 trace.push("install begin");
                 state = effect.setEnabled(state, context.ref, false);
                 state = effect.setEnabled(state, context.ref, true);
-                state = effect.replaceEffect(
-                    state,
-                    context.ref,
-                    setData(get(state, context.ref), { amount: 100 }),
-                );
+                state = effect.update(state, context.ref, data => ({ amount: 100 }));
                 assert.equal(get(state, context.ref).status, "INSTALLING");
                 trace.push("install end");
                 return state;
@@ -112,11 +103,7 @@ test("effect installation: an independent child enables while its parent finishe
             trace.push("install begin");
             state = effect.install(state, unitRef(context.unit), child, {}).state;
             assert.equal(get(state, context.ref).status, "INSTALLING");
-            state = effect.replaceEffect(
-                state,
-                context.ref,
-                setData(get(state, context.ref), { amount: 100 }),
-            );
+            state = effect.update(state, context.ref, data => ({ amount: 100 }));
             trace.push("install end");
             return state;
         },

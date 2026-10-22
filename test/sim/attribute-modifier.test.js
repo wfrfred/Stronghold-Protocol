@@ -2,7 +2,6 @@ import { damage as damageTargeting, healing as healingTargeting } from "../helpe
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
 import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -352,14 +351,8 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
     assert.equal(resolveAttack(work, unitRef(receiver)), 20);
     work = effects.setEnabled(work, ref, true);
     assert.equal(resolveAttack(work, unitRef(receiver)), 80);
-    work = effects.replaceEffect(
-        work,
-        ref,
-        setData(
-            getUnit(work, 1).effects.values().toArray().find((instance) => instance.id === ref.id),
-            sampleInput(work),
-        ),
-    );
+    const sampledInput = sampleInput(work);
+    work = effects.update(work, ref, () => sampledInput);
     work = refreshContribution(work, ref, program, output);
     assert.equal(resolveAttack(work, unitRef(receiver)), 140);
     work = removeUnit(work, 0, "RETREAT");

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { battle, unit } from "../helpers/action-fixture.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { ref as actionRef, setState } from "../../dist/core/tactical/unit/action/action.js";
+import { ref as actionRef } from "../../dist/core/tactical/unit/action/action.js";
 import { advance } from "../../dist/core/tactical/unit/action/advance.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
@@ -45,7 +45,7 @@ test("action: private progress and sampled values survive immutable branches wit
         }),
         step(state, self) {
             if (state.tick < self.state.releaseAtTick) return { state, value: false };
-            state = actions.replace(state, setState(self, { ...self.state, released: true }));
+            state = actions.update(state, actionRef(self), currentState => ({ ...currentState, released: true }));
             state = updateUnit(state, {
                 ...getUnit(state, 1),
                 vitality: { ...getUnit(state, 1).vitality, hp: self.state.power - 7 },
@@ -95,10 +95,7 @@ test("action: different definitions share a source while their state and effects
         program(id, {
             step(state, self) {
                 if (self.state.progress === 0) state = installOwned(state, self);
-                state = actions.replace(
-                    state,
-                    setState(self, { progress: self.state.progress + 1 }),
-                );
+                state = actions.update(state, actionRef(self), currentState => ({ progress: currentState.progress + 1 }));
                 return { state, value: false };
             },
         });
@@ -126,7 +123,7 @@ test("action: equal local identities on different hosts keep progress and lifeti
                 }).state;
             }
             return {
-                state: actions.replace(state, setState(self, { progress: self.state.progress + 1 })),
+                state: actions.update(state, actionRef(self), currentState => ({ progress: currentState.progress + 1 })),
                 value: false,
             };
         },
@@ -173,13 +170,13 @@ test("action: dependency cleanup may remove its ending host before one terminal 
                     return leave(state, self.host.id, "SCRIPT");
                 },
             });
-            return { state: actions.replace(state, setState(self, { progress: 1 })), value: false };
+            return { state: actions.update(state, actionRef(self), () => ({ progress: 1 })), value: false };
         },
         onEnd(state, self, outcome) {
             trace.push(outcome.type);
             assert.equal(getUnit(state, self.host.id), undefined);
             assert.equal(actions.get(state, actionRef(self)), undefined);
-            return actions.replace(state, setState(self, { progress: 9 }));
+            return actions.update(state, actionRef(self), () => ({ progress: 9 }));
         },
     });
     const started = accepted(definition);
@@ -206,7 +203,7 @@ test("action: private progress is visible to nested callbacks before their busin
     const definition = program("visible", {
         step(state, self) {
             currentRef = actionRef(self);
-            state = actions.replace(state, setState(self, { progress: 1 }));
+            state = actions.update(state, actionRef(self), () => ({ progress: 1 }));
             return { state: installOwned(state, self, dependency), value: true };
         },
     });
@@ -282,7 +279,7 @@ test("action: source departure completes nested cleanup while entered content co
             assert.equal(actions.get(state, actionRef(self)), undefined);
             trace.push("returned");
             state = updateUnit(state, { ...getUnit(state, 1), position: [4, 0] });
-            state = actions.replace(state, setState(self, { progress: 9 }));
+            state = actions.update(state, actionRef(self), () => ({ progress: 9 }));
             return { state, value: true };
         },
         onEnd: (state) => {
@@ -310,7 +307,7 @@ test("action: a throwing program leaves its input progress, instances and target
     const definition = program("failure", {
         step(state, self) {
             if (state.tick === 0) return { state, value: false };
-            state = actions.replace(state, setState(self, { progress: 7 }));
+            state = actions.update(state, actionRef(self), () => ({ progress: 7 }));
             state = updateUnit(state, { ...getUnit(state, 1), position: [4, 0] });
             throw failure;
         },

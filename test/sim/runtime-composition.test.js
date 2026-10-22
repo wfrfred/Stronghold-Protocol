@@ -2,7 +2,6 @@ import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { fixtureBattle } from "../helpers/unit.js";
 import { healing } from "../helpers/vitality.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { setData as setEffectData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { initialize as initializeActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import {
     setAttackContribution,
@@ -25,9 +24,9 @@ import { effectFixtureWork } from "../helpers/effects.js";
 import { seededPlacement } from "../helpers/aura.js";
 import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
-import { ref as actionRef, setState } from "../../dist/core/tactical/unit/action/action.js";
+import { ref as actionRef } from "../../dist/core/tactical/unit/action/action.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
-import { install as installEffect, replaceEffect, end as endEffect } from "../../dist/core/tactical/unit/effect/operations.js";
+import { install as installEffect, update as updateEffect, end as endEffect } from "../../dist/core/tactical/unit/effect/operations.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { initialize as initializeVitalityState } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
@@ -99,24 +98,16 @@ function scenario({ failure = null, cancelled = false } = {}) {
         id,
         initialize: () => ({ starts: 0, enables: 0 }),
         onInstall(state, context) {
-            return replaceEffect(
-                state,
-                context.ref,
-                setEffectData(context.self, (current) => ({
+            return updateEffect(state, context.ref, (current) => ({
                     ...current,
                     starts: current.starts + 1,
-                })),
-            );
+                }));
         },
         onEnable(state, context) {
-            state = replaceEffect(
-                state,
-                context.ref,
-                setEffectData(context.self, (current) => ({
+            state = updateEffect(state, context.ref, (current) => ({
                     ...current,
                     enables: current.enables + 1,
-                })),
-            );
+                }));
             const id = `effect:${context.self.id}`;
             return transitionUnit(state, context.ref.host.id, (unit) => {
                 const next = ({ ...unit, offense: setAttackContribution(unit.offense, {
@@ -158,23 +149,15 @@ function scenario({ failure = null, cancelled = false } = {}) {
                         )?.status === "ACTIVE",
                     invoke(state, invocation, pending) {
                         assert.ok(getEffect(state, auraAddress).data.remaining > 0);
-                        state = replaceEffect(
-                            state,
-                            auraAddress,
-                            setEffectData(getEffect(state, auraAddress), (current) => ({
+                        state = updateEffect(state, auraAddress, (current) => ({
                                 ...current,
                                 remaining: current.remaining - 1,
                                 consumed: current.consumed + 1,
-                            })),
-                        );
-                        state = replaceEffect(
-                            state,
-                            ref,
-                            setEffectData(getEffect(state, ref), (current) => ({
+                            }));
+                        state = updateEffect(state, ref, (current) => ({
                                 ...current,
                                 uses: current.uses + 1,
-                            })),
-                        );
+                            }));
                         if (cancelled) {
                             rejected.push({ type: "SKIPPED", reason: "CONTENT_CONDITION" });
                             state = healing(
@@ -242,14 +225,10 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 const self = getEffect(state, context.ref);
                 if (self === undefined || self.status === "ENDING") return state;
                 if (self.data.receivers.some((binding) => binding.unitId === unitId)) continue;
-                state = replaceEffect(
-                    state,
-                    context.ref,
-                    setEffectData(self, (current) => ({
+                state = updateEffect(state, context.ref, (current) => ({
                         ...current,
                         receivers: [...current.receivers, { unitId, ref: null, attempts: 1 }],
-                    })),
-                );
+                    }));
                 const installed = installEffect(
                     state,
                     unitRef(getUnit(state, unitId)),
@@ -262,16 +241,12 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 state = installed.state;
                 const ref = installed.value;
                 assert.ok(ref);
-                state = replaceEffect(
-                    state,
-                    context.ref,
-                    setEffectData(getEffect(state, context.ref), (current) => ({
+                state = updateEffect(state, context.ref, (current) => ({
                         ...current,
                         receivers: current.receivers.map((binding) =>
                             binding.unitId === unitId ? { ...binding, ref } : binding,
                         ),
-                    })),
-                );
+                    }));
             }
             return state;
         },
@@ -319,14 +294,14 @@ function scenario({ failure = null, cancelled = false } = {}) {
         start: state => ({ state, value: { emitted: 0 } }),
         step(state, self) {
             if (self.state.emitted === 0) {
-                self = setState(self, { emitted: 1 });
-                state = actions.replace(state, self);
+                state = actions.update(state, actionRef(self), () => ({ emitted: 1 }));
+                self = actions.get(state, actionRef(self));
                 state = installation(state, self, scoped);
                 state = launch(state, self, primary ? 1 : 3);
             }
             if (primary && self.state.emitted === 1 && state.tick > self.startedAtTick) {
-                self = setState(self, { emitted: 2 });
-                state = actions.replace(state, self);
+                state = actions.update(state, actionRef(self), () => ({ emitted: 2 }));
+                self = actions.get(state, actionRef(self));
                 state = installation(state, self, pulse);
                 state = launch(state, self, 3);
             }

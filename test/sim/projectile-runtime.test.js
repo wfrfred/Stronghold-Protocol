@@ -16,7 +16,7 @@ import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { createDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
 import { createInput as createRouteDefinition } from '../../dist/core/tactical/battle/creation/route.js';
 import * as actions from '../../dist/core/tactical/unit/action/operations.js';
-import { setState } from '../../dist/core/tactical/unit/action/action.js';
+import { ref as actionRef } from '../../dist/core/tactical/unit/action/action.js';
 
 const contactRange = [{ type: 'CIRCLE', offset: [0, 0], radius: 0.3 }];
 const launchInput = {
@@ -391,7 +391,7 @@ test('projectile runtime: command stop callbacks see same-tick launches and a fa
       step(state, self) {
         const count = self.state.emitted ? 1 : 3;
         for (let index = 0; index < count; index++) state = actionLaunch(shell, { traceTarget: null, destination: [100, 0] })(state);
-        state = actions.replace(state, setState(self, { emitted: true }));
+        state = actions.update(state, actionRef(self), () => ({ emitted: true }));
         return { state, value: self.state.emitted };
       },
     };

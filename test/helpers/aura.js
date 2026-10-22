@@ -1,5 +1,4 @@
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { select } from "../../dist/core/tactical/battle/targeting/select.js";
 import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { selectStates as selectCapabilityStates } from "../../dist/core/tactical/unit/snapshot.js";
@@ -39,12 +38,7 @@ export function auraEffect(
         getUnit(state, context.ref.host.id)?.effects.values().toArray().find(
             (effect) => effect.id === context.ref.id,
         );
-    const save = (state, context, update) => {
-        const current = selfOf(state, context);
-        return current === undefined
-            ? state
-            : effects.replaceEffect(state, context.ref, setData(current, update));
-    };
+    const save = (state, context, transform) => effects.update(state, context.ref, transform);
     const refresh = (state, context) => {
         let self = selfOf(state, context);
         if (self?.status !== "ACTIVE") return state;

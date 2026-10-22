@@ -49,8 +49,8 @@ import { advanceMovement } from '../../dist/core/tactical/battle/steps/movement.
 import { createBattleState, appendEvents, getUnit, registerUnit } from '../../dist/core/tactical/battle/state.js';
 import { initialize } from "../helpers/unit.js";
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
-import { setState as setActionState } from '../../dist/core/tactical/unit/action/action.js';
-import { replace as replaceAction } from '../../dist/core/tactical/unit/action/operations.js';
+import { ref as actionRef } from '../../dist/core/tactical/unit/action/action.js';
+import { update as updateAction } from '../../dist/core/tactical/unit/action/operations.js';
 import { install as installEffect } from '../../dist/core/tactical/unit/effect/operations.js';
 
 const navigationMap = (state, mode = 'WALK') => applyOverlays(state.baseline[mode], state.overlays[mode]);
@@ -1174,7 +1174,7 @@ test('core battle propagates nested settlement errors without publishing battlef
     start: state => ({ state, value: { entered: false } }),
     step(state, self) {
       if (self.state.entered) return { state, value: false };
-      state = replaceAction(state, setActionState(self, { entered: true }));
+      state = updateAction(state, actionRef(self), () => ({ entered: true }));
       const unit = initialize({ id: state.execution.nextUnitId, position: [2, 0], definition: {
         id: 'nested-created', vitality: { maxHp: 10, defense: 0, resistance: 0 },
       } });

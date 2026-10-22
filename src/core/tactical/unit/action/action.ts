@@ -30,12 +30,3 @@ export interface Snapshot extends View {
 export function ref<A extends View>(action: A): Ref<A> {
     return { host: action.host, id: action.id } as Ref<A>;
 }
-
-export function setState<P extends object, E extends object>(
-    self: Action<P, E>,
-    next: NoInfer<E> | ((current: NoInfer<E>) => NoInfer<E>),
-): Action<P, E> {
-    const state = typeof next === "function" ? next(self.state) : next;
-
-    return state === self.state ? self : { ...self, state };
-}

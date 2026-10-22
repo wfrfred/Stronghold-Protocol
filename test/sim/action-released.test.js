@@ -1,10 +1,10 @@
+import { ref as actionRef } from "../../dist/core/tactical/unit/action/action.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
-import { setState } from "../../dist/core/tactical/unit/action/action.js";
 import { advance } from "../../dist/core/tactical/unit/action/advance.js";
 import { setBeforeReleaseHook, setReleasedHook } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import { released } from "../../dist/core/tactical/unit/capability/action/release.js";
@@ -120,10 +120,10 @@ test("default attack output reads bindings replaced by a released Hook from the 
     const f = fixture({ targets: 2 });
     const state = changeAction(f.state, (action) => setReleasedHook(action, hook("rebind", (current, context) => {
         const reference = context.action;
-        const self = actions.get(current, reference);
+        const self = getUnit(current, reference.host.id).action.instances.get(reference.id, f.definition);
         assert.equal(self.state.bindings.primary[0].id, 1);
-        return { state: actions.replace(current, setState(self, { ...self.state,
-            bindings: { ...self.state.bindings, primary: [unitRef(getUnit(current, 2))] },
+        return { state: actions.update(current, actionRef(self), currentState => ({ ...currentState,
+            bindings: { ...currentState.bindings, primary: [unitRef(getUnit(current, 2))] },
         })), value: undefined };
     })));
     const started = actions.start(state, f.ref, f.definition);
