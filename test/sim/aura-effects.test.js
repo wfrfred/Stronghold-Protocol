@@ -35,7 +35,7 @@ test("aura membership persists after a child ends until leave and reentry", () =
     battle = effects.advance(at(battle, 3));
     assert.notDeepEqual(get(battle, ref).data.bindings[0].refs[0], child);
     assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 120);
-    assert.equal(before.getUnit(1).effects.values()[0].status, "ACTIVE");
+    assert.equal(before.getUnit(1).effects.values().toArray()[0].status, "ACTIVE");
 });
 
 test("aura refresh frequency belongs to its tick callback", () => {
@@ -111,7 +111,7 @@ test("ordinary end policies decide each receiver against current state", () => {
             },
             onEnd(state, ctx) {
                 for (const binding of ctx.self.data.bindings) {
-                    const keep = getUnit(state, binding.unitId).effects.values().some(
+                    const keep = getUnit(state, binding.unitId).effects.values().toArray().some(
                         (value) => value.definition === marker,
                     );
                     trace.push(["decide", binding.unitId, keep]);
@@ -201,7 +201,7 @@ test("nested installation can disable an aura before later receivers enter", () 
     assert.deepEqual(starts, [1]);
     assert.equal(get(battle, ref).status, "INACTIVE");
     assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 100);
-    assert.equal(getUnit(battle, 2).effects.values().length, 0);
+    assert.equal(getUnit(battle, 2).effects.values().toArray().length, 0);
 });
 
 test("nested child installation ending the aura does not revive parent or child", () => {
@@ -217,6 +217,6 @@ test("nested child installation ending the aura does not revive parent or child"
     ({ state: battle, value: ref } = install(battle, auraEffect(receiver), 0));
     assert.equal(get(battle, ref), undefined);
     assert.deepEqual(starts, [1]);
-    assert.deepEqual(getUnit(battle, 1).effects.values(), []);
+    assert.deepEqual(getUnit(battle, 1).effects.values().toArray(), []);
     assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 100);
 });

@@ -51,12 +51,12 @@ for (const reason of ["DEATH", "RETREAT", "SCRIPT"]) {
         const started = skills.activate(f.state, f.source);
         const state = leave(at(started.state, 1), 0, reason);
         assert.equal(getUnit(state, 0), undefined);
-        assert.deepEqual(getUnit(state, 1).effects.values(), []);
+        assert.deepEqual(getUnit(state, 1).effects.values().toArray(), []);
         assert.deepEqual(f.disabled, [0, 1]);
         assert.deepEqual(f.ended, [{ status: "ENDING", lifecycle: "LEAVING", end: { type: "CANCELLED", reason } }]);
         assert.equal(state.events.filter(({ type }) => type === "SKILL_FINISHED").length, 1);
         assert.equal(getUnit(started.state, 0).skill.active.status, "ACTIVE");
-        assert.equal(getUnit(started.state, 1).effects.values().length, 2);
+        assert.equal(getUnit(started.state, 1).effects.values().toArray().length, 2);
         assert.equal(leave(state, 0, reason), state);
         assert.equal(f.ended.length, 1);
     });
@@ -76,7 +76,7 @@ test("entered start content continues after host departure and late lifetime dep
     const activated = skills.activate(f.state, f.source);
     assert.deepEqual(trace, ["continued"]);
     assert.equal(getUnit(activated.state, 0), undefined);
-    assert.deepEqual(getUnit(activated.state, 1).effects.values(), []);
+    assert.deepEqual(getUnit(activated.state, 1).effects.values().toArray(), []);
     assert.equal(f.ended.length, 1);
     assert.deepEqual(f.disabled, [0, 1]);
     assert.equal(getUnit(f.state, 0).skill.active, null);
@@ -87,7 +87,7 @@ test("termination closes dependent lifetimes before onEnd and reentrant terminat
     let callbacks = 0;
     const f = fixture({ end(battle, self) {
         callbacks++;
-        assert.deepEqual(getUnit(battle, 1).effects.values(), []);
+        assert.deepEqual(getUnit(battle, 1).effects.values().toArray(), []);
         assert.equal(query.get(battle, activationRef(self)).status, "ENDING");
         assert.equal(skills.finish(battle, activationRef(self)), battle);
         assert.equal(skills.cancel(battle, activationRef(self), "NESTED"), battle);
@@ -114,7 +114,7 @@ test("ending content may create independent remote effects while closed lifetime
     } });
     const started = skills.activate(f.state, f.source);
     const finished = skills.finish(started.state, started.value.ref);
-    assert.equal(getUnit(finished, 1).effects.values().length, 1);
+    assert.equal(getUnit(finished, 1).effects.values().toArray().length, 1);
     assert.equal(effects.get(finished, installedRef).status, "ACTIVE");
 });
 
@@ -125,5 +125,5 @@ test("departure cleanup failures propagate without changing the input version", 
     assert.throws(() => leave(started.state, 0, "SCRIPT"), (error) => error === failure);
     assert.equal(getUnit(started.state, 0).lifecycle, "PRESENT");
     assert.equal(getUnit(started.state, 0).skill.active.status, "ACTIVE");
-    assert.equal(getUnit(started.state, 1).effects.values().length, 2);
+    assert.equal(getUnit(started.state, 1).effects.values().toArray().length, 2);
 });

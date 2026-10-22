@@ -778,7 +778,7 @@ import type { BattlefieldView } from ${sourceModule('../battlefield/contract')};
 import type { BattlefieldMap } from ${sourceModule('../battlefield/map/map')};
 import { createUnitPlacementDefinition, instantiateUnitPlacement, type UnitPlacementDefinition } from ${sourceModule('../battle/creation/placement')};
 import type { BattleExecutionState } from ${sourceModule('../battle/execution/state')};
-import { launchProjectile, getProjectile, type ProjectileLaunchInput } from ${sourceModule('../battlefield/projectile/operations')};
+import { launchProjectile, getProjectile, ref as projectileRef, type ProjectileLaunchInput } from ${sourceModule('../battlefield/projectile/operations')};
 import type { Definition as ProjectileDefinition } from ${sourceModule('../battlefield/projectile/definition')};
 import type { Projectile } from ${sourceModule('../battlefield/projectile/projectile')};
 import type { State as BattleState } from ${sourceModule('../battle/state')};
@@ -906,14 +906,14 @@ type ProjectileState = Assert<Equal<typeof projectileResult.state, BattleState>>
 const recoveredProjectile = getProjectile(projectileResult.state, projectileResult.value);
 type ProjectileData = Assert<Equal<NonNullable<typeof recoveredProjectile>['state'], { readonly charges: number }>>;
 battleState.battlefield.projectiles.add(typedProjectile);
-battleState.battlefield.projectiles.replace(typedProjectile);
+battleState.battlefield.projectiles.replace(projectileRef(typedProjectile), typedProjectile);
 `);
     assert.deepEqual(positive, []);
 
     for (const [name, source] of [
       ['projectile-false-definition', `battleState.battlefield.projectiles.add({ ...typedProjectile, definition: { id: 'fake' } });`],
       ['projectile-wrong-initial-state', `launchProjectile(battleState, projectileDefinition, { ...projectileInput, initialState: { charges: 'wrong' } }, 0);`],
-      ['projectile-wrong-state-pairing', `battleState.battlefield.projectiles.replace({ ...typedProjectile, state: { charges: 'wrong' } });`],
+      ['projectile-wrong-state-pairing', `battleState.battlefield.projectiles.replace(projectileRef(typedProjectile), { ...typedProjectile, state: { charges: 'wrong' } });`],
       ['projectile-untyped-callback', `getProjectile(battleState, 0)!.definition.acceptsContact;`],
       ['projectile-erased-transition', `transition(createBattlefieldState({ map: battlefieldMap }), [{ type: 'REGISTER_PROJECTILE', projectile: typedProjectile }]);`],
       ['state-extra-field', `initializeUnit(battleState, { id: 1, definition: { id: 'offense', offense: { attack: 1 } }, position: [0, 0], states: { offense: initializeOffenseState(battleState, { attack: 1 }).value } });`],

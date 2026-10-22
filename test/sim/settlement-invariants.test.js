@@ -30,12 +30,12 @@ test("settlement invariants: invalid final damage preserves its input despite pr
         const battle = workFor(unit(1), attach(unit(2), content));
         assert.throws(() => settle(battle, damageRequest()), RangeError);
         assert.equal(getUnit(battle, 2).vitality.hp, 200);
-        assert.equal(getUnit(battle, 2).effects.values()[0].data.uses, 0);
+        assert.equal(getUnit(battle, 2).effects.values().toArray()[0].data.uses, 0);
         assert.equal(completed, 0);
         malformed = false;
         const valid = settle(battle, damageRequest());
         assert.equal(getUnit(valid.state, 2).vitality.hp, 180);
-        assert.equal(getUnit(valid.state, 2).effects.values()[0].data.uses, 1);
+        assert.equal(getUnit(valid.state, 2).effects.values().toArray()[0].data.uses, 1);
         assert.equal(valid.value.application.hpLoss, 30);
         assert.equal(completed, 1);
     }
@@ -56,12 +56,12 @@ test("settlement invariants: invalid final healing preserves its input despite p
         const battle = workFor(unit(1), attach(unit(2), content));
         assert.throws(() => heal(battle, healingRequest()), RangeError);
         assert.equal(getUnit(battle, 2).vitality.hp, 200);
-        assert.equal(getUnit(battle, 2).effects.values()[0].data.uses, 0);
+        assert.equal(getUnit(battle, 2).effects.values().toArray()[0].data.uses, 0);
         assert.equal(reactions, 0);
         malformed = false;
         const valid = heal(battle, healingRequest());
         assert.equal(getUnit(valid.state, 2).vitality.hp, 220);
-        assert.equal(getUnit(valid.state, 2).effects.values()[0].data.uses, 1);
+        assert.equal(getUnit(valid.state, 2).effects.values().toArray()[0].data.uses, 1);
         assert.equal(valid.value.application.hpGain, 30);
         assert.equal(reactions, 1);
     }

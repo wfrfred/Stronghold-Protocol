@@ -10,10 +10,13 @@ export type Id = string;
 export type End =
     { readonly type: "FINISHED" } | { readonly type: "CANCELLED"; readonly reason: string };
 
-export interface Definition<P extends object = object, E extends object = object> {
+export interface View {
     readonly id: Id;
     readonly intervalTicks: number;
     readonly speed: number;
+}
+
+export interface Definition<P extends object = object, E extends object = object> extends View {
     readonly initialize: (battle: BattleState) => Result<P>;
     readonly start: (
         battle: BattleState,

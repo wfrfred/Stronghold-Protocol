@@ -41,14 +41,14 @@ test('Melantha uses main-mode level, potential, trust and talent, then a scoped 
   const entered = state;
   const base = (738 + 25 + 65) * 1.08;
   assert.equal(resolveAttack(state, unitRef(getUnit(state, 0))), base);
-  assert.equal(getUnit(untouched, 0).effects.values().length, 0);
+  assert.equal(getUnit(untouched, 0).effects.values().toArray().length, 0);
   state = updateUnit(state, { ...getUnit(state, 0), skill: { ...getUnit(state, 0).skill, sp: { ...getUnit(state, 0).skill.sp, value: 40 } } });
   const activation = activateSkill({ ...state, tick: 0  }, unitRef(getUnit(state, 0)));
   state = activation.state;
   assert.equal(activation.value.type, 'ACTIVATED');
   assert.equal(resolveAttack(state, unitRef(getUnit(state, 0))), (738 + 25 + 65) * 1.58);
-  assert.equal(getUnit(entered, 0).effects.values().length, 1);
-  assert.equal(getUnit(state, 0).effects.values().length, 2);
+  assert.equal(getUnit(entered, 0).effects.values().toArray().length, 1);
+  assert.equal(getUnit(state, 0).effects.values().toArray().length, 2);
   const active = state;
   state = advanceSkill({ ...state, tick: 600 }, unitRef(getUnit(state, 0)));
   assert.equal(resolveAttack(state, unitRef(getUnit(state, 0))), base);
@@ -67,13 +67,13 @@ test('explicit skill finish removes only skill output, preserving Melantha talen
   state = activateSkill({ ...state, tick: 0  }, unitRef(getUnit(state, 0))).state;
   state = finishSkill({ ...state, tick: 1 }, activationRef(getUnit(state, 0).skill.active));
   assert.equal(resolveAttack(state, unitRef(getUnit(state, 0))), before);
-  assert.equal(getUnit(state, 0).effects.values().length, 1);
+  assert.equal(getUnit(state, 0).effects.values().toArray().length, 1);
 });
 
 test('ordinary attacks read current talent and skill contributions instead of captured table attack', () => {
 
   const definition = create(profile());
-  const attack = definition.action.definitions.values()[0];
+  const attack = definition.action.definitions.values().toArray()[0];
   const receiver = initialize({ id: 1, position: [1, 0], definition: {
     id: 'receiver', targetable: { restrictions: [] }, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, layer: { type: 'GROUND' },
     hitbox: { shape: { type: 'CIRCLE', offset: [0, 0], radius: .1 } },
@@ -102,7 +102,7 @@ test('the ordinary ground block radius catches a target 0.6 units from Melantha'
 
 test('Melantha still checks active targeting restrictions on enemies she is blocking', () => {
   const definition = create(profile());
-  const attack = definition.action.definitions.values()[0];
+  const attack = definition.action.definitions.values().toArray()[0];
   for (const value of [invisibleRestriction, camouflageRestriction, untargetableRestriction]) {
     const receiver = initialize({ id: 1, position: [0.6, 0], definition: {
       id: 'hidden-blocked-enemy', targetable: { restrictions: [{ id: 'innate', value }] },

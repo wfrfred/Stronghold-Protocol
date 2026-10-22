@@ -109,12 +109,12 @@ test('elemental execution: erosion defense loss survives recovery and stacks on 
 
 test('elemental execution: repeated enemy neural bursts refresh the remaining three paralysis charges', () => {
   let work = element(effectFixtureWork(unit('ENEMY')), 'NEURAL').state;
-  const original = getUnit(work, 1).effects.values().find(effect => effect.definition.id.endsWith('/paralysis'));
+  const original = getUnit(work, 1).effects.values().toArray().find(effect => effect.definition.id.endsWith('/paralysis'));
   assert.equal(original.data.remaining, 3);
   work = advance(work, 300);
   assert.equal(getUnit(work, 1).effects.get(original.id).data.remaining, 3);
   work = element(work, 'NEURAL').state;
-  const residual = getUnit(work, 1).effects.values().filter(effect => effect.definition.id.endsWith('/paralysis'));
+  const residual = getUnit(work, 1).effects.values().toArray().filter(effect => effect.definition.id.endsWith('/paralysis'));
   assert.equal(residual.length, 1);
   assert.equal(residual[0].id, original.id);
   assert.equal(residual[0].data.remaining, 3);

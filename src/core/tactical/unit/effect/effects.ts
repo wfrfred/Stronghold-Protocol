@@ -1,18 +1,16 @@
+import { Store } from "../../../common/collection/store.js";
+import type { Query } from "../../../common/query.js";
+import type { Ref } from "../../../common/ref.js";
 import type { Definition } from "./definition.js";
-import type { Effect, Id } from "./effect.js";
-
-type StoredEffect = Omit<Effect, "definition" | "data"> & {
-    readonly definition: Pick<Effect["definition"], "id" | "group">;
-    readonly data: object;
-};
+import type { Effect, Id, Snapshot, View } from "./effect.js";
 
 export class Effects {
-    static readonly #empty = new Effects([], 0);
+    static readonly #empty = new Effects(Store.empty<Id, View>(), 0);
 
-    readonly #entries: readonly StoredEffect[];
+    readonly #entries: Store<Id, View>;
     readonly nextId: Id;
 
-    private constructor(entries: readonly StoredEffect[], nextId: Id) {
+    private constructor(entries: Store<Id, View>, nextId: Id) {
         this.#entries = entries;
         this.nextId = nextId;
     }
@@ -21,17 +19,25 @@ export class Effects {
         return Effects.#empty;
     }
 
-    get(id: Id): StoredEffect | undefined;
+    get size(): number {
+        return this.#entries.size;
+    }
+
+    get(id: Id): View | undefined;
+    get<E extends View>(reference: Ref<E>): E | undefined;
     get<S extends object, H extends object>(
         id: Id,
         definition: Definition<S, H>,
     ): Effect<S, H> | undefined;
-    get<S extends object, H extends object>(
-        id: Id,
+    get<E extends View, S extends object, H extends object>(
+        identity: Id | Ref<E>,
         definition?: Definition<S, H>,
-    ): StoredEffect | Effect<S, H> | undefined {
-        const effect = this.#entries.find((entry) => entry.id === id);
+    ): View | E | Effect<S, H> | undefined {
+        const effect = this.#entries.get(typeof identity === "number" ? identity : identity.id);
 
+        if (typeof identity !== "number" && effect?.host.id !== identity.host.id) {
+            return undefined;
+        }
         if (definition === undefined) {
             return effect;
         }
@@ -46,13 +52,17 @@ export class Effects {
         id: Id,
         reader: <S extends object, H extends object>(effect: Effect<S, H>) => R,
     ): R | undefined {
-        const effect = this.#entries.find((entry) => entry.id === id);
+        const effect = this.#entries.get(id);
 
         return effect === undefined ? undefined : reader(effect as Effect);
     }
 
-    values(): readonly StoredEffect[] {
-        return this.#entries;
+    values(): Query<View> {
+        return this.#entries.values();
+    }
+
+    keys(): Query<Id> {
+        return this.#entries.keys();
     }
 
     add<S extends object, H extends object>(effect: Effect<S, H>): Effects {
@@ -66,18 +76,22 @@ export class Effects {
             throw new RangeError("effect identity overflow");
         }
 
-        return new Effects([...this.#entries, effect], nextId);
+        return new Effects(this.#entries.add(effect.id, effect), nextId);
     }
 
-    replace<S extends object, H extends object>(effect: Effect<S, H>): Effects {
-        const index = this.#entries.findIndex((entry) => entry.id === effect.id);
-
-        if (index < 0) {
-            return this;
+    replace<S extends object, H extends object>(
+        reference: Ref<Effect<S, H>>,
+        effect: NoInfer<Effect<S, H>>,
+    ): Effects {
+        if (reference.id !== effect.id || reference.host.id !== effect.host.id) {
+            throw new TypeError("effect identity mismatch");
         }
 
-        const previous = this.#entries[index]!;
+        const previous = this.#entries.get(reference.id);
 
+        if (previous === undefined) {
+            return this;
+        }
         if (previous.definition !== effect.definition) {
             throw new TypeError("effect definition cannot change");
         }
@@ -88,24 +102,22 @@ export class Effects {
             return this;
         }
 
-        return new Effects(
-            [...this.#entries.slice(0, index), effect, ...this.#entries.slice(index + 1)],
-            this.nextId,
-        );
+        return new Effects(this.#entries.replace(effect.id, effect), this.nextId);
     }
 
     remove(id: Id): Effects {
-        const index = this.#entries.findIndex((entry) => entry.id === id);
-
-        return index < 0
+        return this.#entries.get(id) === undefined
             ? this
-            : new Effects(
-                  [...this.#entries.slice(0, index), ...this.#entries.slice(index + 1)],
-                  this.nextId,
-              );
+            : new Effects(this.#entries.remove(id), this.nextId);
     }
 
-    toJSON(): { readonly instances: readonly StoredEffect[]; readonly nextId: Id } {
-        return { instances: this.#entries, nextId: this.nextId };
+    toJSON(): { readonly instances: readonly Snapshot[]; readonly nextId: Id } {
+        return {
+            instances: this.#entries
+                .keys()
+                .map((id) => this.read(id, (effect): Snapshot => effect)!)
+                .toArray(),
+            nextId: this.nextId,
+        };
     }
 }

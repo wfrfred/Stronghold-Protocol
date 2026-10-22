@@ -285,7 +285,7 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
     installed = effects.install(installed, unitRef(getUnit(installed, 0)), program).state;
     const receiver = getUnit(installed, 0);
     assert.equal(
-        resolveSpeed(installed, unitRef(receiver), receiver.definition.action.definitions.values()[0]),
+        resolveSpeed(installed, unitRef(receiver), receiver.definition.action.definitions.values().toArray()[0]),
         190,
     );
     close(
@@ -356,7 +356,7 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
         work,
         ref,
         setData(
-            getUnit(work, 1).effects.values().find((instance) => instance.id === ref.id),
+            getUnit(work, 1).effects.values().toArray().find((instance) => instance.id === ref.id),
             sampleInput(work),
         ),
     );
@@ -364,7 +364,7 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
     assert.equal(resolveAttack(work, unitRef(receiver)), 140);
     work = removeUnit(work, 0, "RETREAT");
     assert.equal(resolveAttack(work, unitRef(receiver)), 140);
-    assert.equal(copied.effects.values()[0].data.sourceAttack, 100);
+    assert.equal(copied.effects.values().toArray()[0].data.sourceAttack, 100);
     work = effects.end(work, ref);
     assert.equal(resolveAttack(work, unitRef(receiver)), 20);
 });

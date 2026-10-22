@@ -13,17 +13,17 @@ test("Projectile Refs preserve private state types through creation, queries and
     try {
         writeFileSync(path, `
 import type { Ref } from ${source("common/ref")};
+import type { Query } from ${source("common/query")};
 import type { State as BattleState } from ${source("tactical/battle/state")};
 import { battlefieldView } from ${source("tactical/battle/state")};
 import type { Unit } from ${source("tactical/unit/unit")};
-import type { Projectile } from ${source("tactical/battlefield/projectile/projectile")};
-import type { Projectiles } from ${source("tactical/battlefield/projectile/projectiles")};
+import type { Projectile, View } from ${source("tactical/battlefield/projectile/projectile")};
+import { Projectiles } from ${source("tactical/battlefield/projectile/projectiles")};
 import { createDefinition } from ${source("tactical/battlefield/projectile/definition")};
 import { all, ref, getProjectile, launchProjectile, replaceProjectile, type ProjectileLaunchInput } from ${source("tactical/battlefield/projectile/operations")};
 import { stopProjectile } from ${source("tactical/battlefield/projectile/settlement")};
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
-type Stored = ReturnType<Projectiles["values"]>[number];
 declare const battle: BattleState;
 declare const input: ProjectileLaunchInput<{ charges: number }>;
 declare const unit: Ref<Unit>;
@@ -43,9 +43,20 @@ type Current = Assert<Equal<typeof current, Projectile<{ charges: number }> | un
 const known = ref(projectile);
 type Known = Assert<Equal<typeof known, Ref<Projectile<{ charges: number }>>>>;
 const weaker: Ref<Projectile<{ charges: number }>> = specialized;
-const erased: Ref<Stored> = weaker;
+const erased: Ref<View> = weaker;
 const candidates = all(battle);
-type Candidates = Assert<Equal<typeof candidates, Ref<Stored>[]>>;
+type Candidates = Assert<Equal<typeof candidates, Ref<View>[]>>;
+const entries = Projectiles.empty().add(projectile);
+const publicEntries: Query<View> = entries.values();
+entries.replace(known, projectile);
+// @ts-expect-error a precise reference fixes replacement state inference.
+entries.replace(known, { ...projectile, state: { charges: "wrong" } });
+// @ts-expect-error public references do not prove writable private state types.
+entries.replace(erased, projectile);
+// @ts-expect-error public views cannot be inserted as complete instances.
+entries.add(getProjectile(battle, erased)!);
+// @ts-expect-error snapshots retain unknown payloads, not writable type proofs.
+entries.replace(known, entries.snapshot()[0]!);
 const fromView = battlefieldView(battle).getProjectile(known);
 type FromView = Assert<Equal<typeof fromView, Projectile<{ charges: number }> | undefined>>;
 stopProjectile(battle, weaker, 1);

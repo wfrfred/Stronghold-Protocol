@@ -72,7 +72,7 @@ test("entry installs one persistent shield container and preserves prior snapsho
     const { initial, state, prepared } = setup();
     assert.equal(readShield(getUnit(initial, 0)), undefined);
     assert.deepEqual(readShield(getUnit(state, 0)), { layers: 1, timer: 270 });
-    assert.equal(getUnit(state, 0).effects.values().filter(instance => instance.definition.id === "mudrock/shield").length, 1);
+    assert.equal(getUnit(state, 0).effects.values().toArray().filter(instance => instance.definition.id === "mudrock/shield").length, 1);
     assert.equal(getUnit(state, 0).definition.profile, prepared);
     assert.deepEqual(getUnit(state, 0).definition.deployable, {
         cost: prepared.attributes.cost, redeployTicks: prepared.attributes.respawnTime * 30,
@@ -99,7 +99,7 @@ test("shield cancels damage, consumes a layer, self-heals and retains normal HIT
     approximate(getUnit(result.state, 0).vitality.hp, 1000 + fixture.prepared.attributes.maxHp * 0.2);
     assert.equal(getUnit(result.state, 0).skill.sp.value, 1);
     assert.deepEqual(readShield(getUnit(result.state, 0)), { layers: 0, timer: 270 });
-    assert.equal(getUnit(result.state, 0).effects.values().find(instance => instance.definition.id === "mudrock/shield").status, "ACTIVE");
+    assert.equal(getUnit(result.state, 0).effects.values().toArray().find(instance => instance.definition.id === "mudrock/shield").status, "ACTIVE");
     assert.equal(getUnit(before, 0).vitality.hp, 1000);
     assert.deepEqual(readShield(getUnit(before, 0)), { layers: 1, timer: 270 });
     const external = healing(result.state, {
@@ -162,7 +162,7 @@ test("invincible reception leaves shield untouched and removing its effect remov
     const canceled = hit(protectedState);
     assert.equal(canceled.value.kind, "REJECTED");
     assert.equal(readShield(getUnit(canceled.state, 0)).layers, 1);
-    const effect = getUnit(fixture.state, 0).effects.values().find(instance => instance.definition.id === "mudrock/shield");
+    const effect = getUnit(fixture.state, 0).effects.values().toArray().find(instance => instance.definition.id === "mudrock/shield");
     const removed = end(fixture.state, { host: { id: 0 }, id: effect.id });
     assert.equal(readShield(getUnit(removed, 0)), undefined);
     assert.equal(hit(removed).value.application.hpLoss, 100);
@@ -180,7 +180,7 @@ test("shield recharge keeps its periodic clock while capped and zero layers rema
     state = hit(state).state;
     state = advance({ ...state, tick: 1080 });
     assert.deepEqual(readShield(getUnit(state, 0)), { layers: 3, timer: 270 });
-    assert.equal(getUnit(state, 0).effects.values().filter(instance => instance.definition.id === "mudrock/shield").length, 1);
+    assert.equal(getUnit(state, 0).effects.values().toArray().filter(instance => instance.definition.id === "mudrock/shield").length, 1);
     const e1 = setup({ elite: 1, level: 80 });
     assert.equal(readShield(getUnit(advance({ ...e1.state, tick: 810 }), 0)).layers, 2);
 });
@@ -234,10 +234,11 @@ test("S2 immediately overrides normal attack and recovery cooldown, heals once, 
         enemy(3, [1, 0], { layer: { type: "AIR" } }), enemy(4, [5, 0])]);
     let ready = sp(hp(fixture.state, 1000), 5);
     ready = save(ready, {
-        action: { ...getUnit(ready, 0).action, states: new Map(
-            [...getUnit(ready, 0).action.states].map(([id, current]) => [id, {
+        action: { ...getUnit(ready, 0).action, states: getUnit(ready, 0).action.states.keys().reduce(
+            (states, id) => states.read(id, current => states.replace(current.definition, {
                 ...current, cooldown: { readyAtTick: 10000, periodTicks: 60 },
-            }]),
+            })),
+            getUnit(ready, 0).action.states,
         ) },
         offense: setAttackContribution(getUnit(ready, 0).offense, { id: "test/attack", value: [modifier({ addition: 100 })] }),
     });
@@ -304,7 +305,7 @@ test("an old S2 recovery cannot close a newer skill activation", () => {
     state = start(state, unitRef(getUnit(state, 0)), fixture.action).state;
     assert.equal(getUnit(state, 0).skill.active.id, 0);
     state = finishSkill({ ...{ ...state, tick: 1 }, tick: 1 }, activationRef(getUnit({ ...state, tick: 1 }, 0).skill.active));
-    assert.ok(getUnit(state, 0).effects.values().every(effect => effect.definition.id !== "mudrock/skill-attack"));
+    assert.ok(getUnit(state, 0).effects.values().toArray().every(effect => effect.definition.id !== "mudrock/skill-attack"));
     state = activateSkill({ ...sp(state, 5), tick: 1 }, unitRef(getUnit(sp(state, 5), 0)), "AUTO" ).state;
     assert.equal(getUnit(state, 0).skill.active.id, 1);
     state = advanceAction(state, { host: { id: 0 }, id: 0 });

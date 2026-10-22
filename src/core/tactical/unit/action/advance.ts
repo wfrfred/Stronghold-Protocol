@@ -2,12 +2,10 @@ import type { Ref } from "../../../common/ref.js";
 import type { State as BattleState } from "../../battle/state.js";
 import { get as getUnit } from "../query.js";
 import { isSpatiallyPresent } from "../capability/presence/capability.js";
-import type { Actions } from "./actions.js";
+import type { View } from "./action.js";
 import { end } from "./internal/end.js";
 
-type StoredAction = ReturnType<Actions["values"]>[number];
-
-export function advance(battle: BattleState, reference: Ref<StoredAction>): BattleState {
+export function advance(battle: BattleState, reference: Ref<View>): BattleState {
     return (
         getUnit(battle, reference.host)?.action.instances.read(reference.id, (self) => {
             if (self.status !== "RUNNING") {

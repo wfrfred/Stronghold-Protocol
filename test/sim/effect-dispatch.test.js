@@ -38,7 +38,7 @@ test("hook dispatch checks each Effect against its current status immediately be
     enableSecond = true;
     battle = settle(battle, request()).state;
     assert.deepEqual(calls, ["first", "first", "second"]);
-    assert.equal(target.effects.values()[1].status, "ACTIVE");
+    assert.equal(target.effects.values().toArray()[1].status, "ACTIVE");
 });
 
 test("finishing a pending Effect removes its Hook before that candidate can execute", () => {
@@ -54,7 +54,7 @@ test("finishing a pending Effect removes its Hook before that candidate can exec
     } }], { onEnd(state) { calls.push("end"); return state; } });
     const result = settle(workFor(unit(1), attach(attach(unit(2), first), second)), request());
     assert.deepEqual(calls, ["first", "end"]);
-    assert.equal(getUnit(result.state, 2).effects.values().length, 1);
+    assert.equal(getUnit(result.state, 2).effects.values().toArray().length, 1);
     assert.equal(getUnit(result.state, 2).vitality.damageHooks.length, 1);
 });
 

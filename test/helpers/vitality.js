@@ -165,7 +165,7 @@ export function barrier(id = "barrier", remainingAmount = 500, priority = 0) {
 
 export function stateOf(battle, unitId, content) {
     return getUnit(battle, unitId)
-        .effects.values()
+        .effects.values().toArray()
         .find((instance) => instance.definition === content)?.data;
 }
 

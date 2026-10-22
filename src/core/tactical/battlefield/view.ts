@@ -1,12 +1,10 @@
 import type { Unit } from "../unit/unit.js";
 import type { Ref } from "../../common/ref.js";
-import type { Projectiles } from "./projectile/projectiles.js";
+import type { View as ProjectileView } from "./projectile/projectile.js";
 import { blockingUsedCapacity } from "./blocking/relations.js";
 import type { BattlefieldView } from "./contract.js";
 import type { State } from "./state.js";
 import { battlefieldTileKey, battlefieldOccupancyKey } from "./storage/indexes.js";
-
-type StoredProjectile = ReturnType<Projectiles["values"]>[number];
 
 export function view<U extends Unit>(state: State<U>): BattlefieldView<U> {
     const map = state.map;
@@ -23,8 +21,8 @@ export function view<U extends Unit>(state: State<U>): BattlefieldView<U> {
         get projectileIds() {
             return [...state.projectiles.keys()];
         },
-        getProjectile: <P extends StoredProjectile>(reference: Ref<P>) =>
-            state.projectiles.get(reference.id) as P | undefined,
+        getProjectile: <P extends ProjectileView>(reference: Ref<P>) =>
+            state.projectiles.get(reference),
         get mechanismIds() {
             return [...state.mechanisms.keys()];
         },

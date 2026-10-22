@@ -72,7 +72,7 @@ test("MaxHP outputs coordinate each setter before its lifecycle callback", () =>
     assert.deepEqual(pair(battle), [100, 200]);
     battle = effects.setEnabled(battle, ref, false);
     assert.deepEqual(pair(battle), [50, 100]);
-    const current = getUnit(battle, ref.host.id).effects.values().find(effect => effect.id === ref.id);
+    const current = getUnit(battle, ref.host.id).effects.values().toArray().find(effect => effect.id === ref.id);
     battle = effects.replaceEffect(battle, ref, setData(current, { amount: 200 }));
     battle = effects.setEnabled(battle, ref, true);
     assert.deepEqual(pair(battle), [150, 300]);
@@ -113,5 +113,5 @@ test("MaxHP tick deadline and callback successor use the latest HP ratio", () =>
     battle = transitionUnit(battle, 1, (unit) => ({ ...unit, vitality: { ...unit.vitality, hp: 40 } }));
     battle = effects.advance(at(battle, 1));
     assert.deepEqual(pair(battle), [30, 150]);
-    assert.equal(getUnit(battle, 1).effects.values()[0].definition, successor);
+    assert.equal(getUnit(battle, 1).effects.values().toArray()[0].definition, successor);
 });

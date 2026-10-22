@@ -58,7 +58,7 @@ export function advance(battle: BattleState): BattleState {
         const current = units.get(battle, reference)!;
         const selected = current.definition.action.select?.(battle, current) ?? {
             state: battle,
-            value: current.definition.action.definitions.values().map(({ id }) => id),
+            value: current.definition.action.definitions.keys().toArray(),
         };
         battle = selected.state;
 

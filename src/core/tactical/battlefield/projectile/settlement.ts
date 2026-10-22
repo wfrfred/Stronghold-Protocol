@@ -15,10 +15,7 @@ import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js
 import * as units from "../../unit/query.js";
 import type { ProjectileQueryContext } from "./context.js";
 import type { Definition } from "./definition.js";
-import type { ProjectileId, Projectile, ProjectileStopReason } from "./projectile.js";
-import type { Projectiles } from "./projectiles.js";
-
-type StoredProjectile = ReturnType<Projectiles["values"]>[number];
+import type { ProjectileId, Projectile, ProjectileStopReason, View } from "./projectile.js";
 
 export type ProjectileSignal = {
     readonly projectileId: ProjectileId;
@@ -39,7 +36,7 @@ function projectileContext<S extends object>(
     return { projectile, tick, facts: battlefieldView(state) };
 }
 
-function signalFacts(projectile: StoredProjectile, tick: number): Omit<ProjectileSignal, "type"> {
+function signalFacts(projectile: View, tick: number): Omit<ProjectileSignal, "type"> {
     return {
         projectileId: projectile.id,
         source: projectile.source,
@@ -48,7 +45,7 @@ function signalFacts(projectile: StoredProjectile, tick: number): Omit<Projectil
     };
 }
 
-function inContactArea(projectile: StoredProjectile, target: Unit): boolean {
+function inContactArea(projectile: View, target: Unit): boolean {
     return (
         isSpatiallyPresent(target) &&
         hasHitbox(target) &&
@@ -113,7 +110,7 @@ function contact<S extends object>(
 
 export function stopProjectile(
     state: BattleState,
-    reference: Ref<StoredProjectile>,
+    reference: Ref<View>,
     tick: number,
     reason: ProjectileStopReason = "EXPLICIT",
 ): BattleState {
@@ -149,11 +146,7 @@ export function stopProjectile(
     );
 }
 
-function advanceProjectile(
-    state: BattleState,
-    reference: Ref<StoredProjectile>,
-    tick: number,
-): BattleState {
+function advanceProjectile(state: BattleState, reference: Ref<View>, tick: number): BattleState {
     return (
         state.battlefield.projectiles.read(reference.id, (current) => {
             if (current.lastAdvancedTick >= tick) {

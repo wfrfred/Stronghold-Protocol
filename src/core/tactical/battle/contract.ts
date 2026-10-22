@@ -30,7 +30,7 @@ import type {
 import type { SupportRelation } from "../battlefield/support/relations.js";
 import type { Ref } from "../../common/ref.js";
 import type { Signal as ActionSignal } from "../unit/action/event.js";
-import type { Actions } from "../unit/action/actions.js";
+import type { View as ActionView } from "../unit/action/action.js";
 import type { ProjectileId, ProjectileState } from "../battlefield/projectile/projectile.js";
 import type { ProjectileSignal } from "../battlefield/projectile/settlement.js";
 import type { Signal as ElementalSignal } from "../unit/capability/elemental/operations.js";
@@ -57,7 +57,7 @@ export type Command =
     | { readonly type: "FINISH_SKILL"; readonly unitId: Id }
     | {
           readonly type: "CANCEL_ACTION_EXECUTION";
-          readonly ref: Ref<ReturnType<Actions["values"]>[number]>;
+          readonly ref: Ref<ActionView>;
       }
     | { readonly type: "STOP_PROJECTILE"; readonly projectileId: ProjectileId }
     | { readonly type: "TRIGGER_BRANCH"; readonly branchId: string; readonly isLoop: boolean };

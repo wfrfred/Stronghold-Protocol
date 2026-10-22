@@ -84,8 +84,8 @@ test("action: cancellation closes its dependencies once and retains preceding bu
     const cancelled = actions.cancel({ ...started.state, tick: 1 }, started.value.ref, "SCRIPT");
     assert.equal(ended, 1);
     assert.deepEqual(getUnit(cancelled, 1).position, [3, 0]);
-    assert.deepEqual(getUnit(cancelled, 1).effects.values(), []);
-    assert.equal(getUnit(started.state, 1).effects.values().length, 1);
+    assert.deepEqual(getUnit(cancelled, 1).effects.values().toArray(), []);
+    assert.equal(getUnit(started.state, 1).effects.values().toArray().length, 1);
     assert.equal(actions.cancel(cancelled, started.value.ref, "AGAIN"), cancelled);
     assert.equal(ended, 1);
 });
@@ -113,8 +113,8 @@ test("action: different definitions share a source while their state and effects
     const cancelled = actions.cancel(b.state, a.value.ref, "SCRIPT");
     assert.equal(actions.get(cancelled, a.value.ref), undefined);
     assert.equal(actions.get(cancelled, b.value.ref).state.progress, 1);
-    assert.equal(getUnit(cancelled, 1).effects.values().length, 1);
-    assert.equal(getUnit(b.state, 1).effects.values().length, 2);
+    assert.equal(getUnit(cancelled, 1).effects.values().toArray().length, 1);
+    assert.equal(getUnit(b.state, 1).effects.values().toArray().length, 2);
 });
 
 test("action: equal local identities on different hosts keep progress and lifetime dependencies independent", () => {
@@ -149,14 +149,14 @@ test("action: equal local identities on different hosts keep progress and lifeti
     const cancelled = actions.cancel(progressed, first.value.ref, "SCRIPT");
     assert.equal(actions.get(cancelled, first.value.ref), undefined);
     assert.equal(actions.get(cancelled, second.value.ref).state.progress, 2);
-    assert.deepEqual(getUnit(cancelled, 2).effects.values().map(effect => effect.id), [1]);
-    assert.equal(getUnit(second.state, 2).effects.values().length, 2);
+    assert.deepEqual(getUnit(cancelled, 2).effects.values().toArray().map(effect => effect.id), [1]);
+    assert.equal(getUnit(second.state, 2).effects.values().toArray().length, 2);
     assert.equal(getUnit(initial, 0).action.instances.nextId, 0);
     assert.equal(getUnit(cancelled, 0).action.instances.nextId, 1);
     assert.equal(getUnit(cancelled, 1).action.instances.nextId, 1);
 
     const ended = actions.cancel(cancelled, second.value.ref, "SCRIPT");
-    assert.deepEqual(getUnit(ended, 2).effects.values(), []);
+    assert.deepEqual(getUnit(ended, 2).effects.values().toArray(), []);
     assert.deepEqual(ended.events.filter(event => event.type === "ACTION_CANCELLED")
         .map(event => [event.sourceUnitId, event.executionId]), [[0, 0], [1, 0]]);
 });
@@ -186,7 +186,7 @@ test("action: dependency cleanup may remove its ending host before one terminal 
     const completed = advance({ ...started.state, tick: 1 }, started.value.ref);
     assert.deepEqual(trace, ["dependency", "FINISHED"]);
     assert.equal(getUnit(completed, 0), undefined);
-    assert.deepEqual(getUnit(completed, 1).effects.values(), []);
+    assert.deepEqual(getUnit(completed, 1).effects.values().toArray(), []);
     assert.equal(actions.get(completed, started.value.ref), undefined);
     assert.equal(completed.events.filter(event => event.type === "ACTION_FINISHED").length, 1);
     assert.equal(completed.events.some(event => event.type === "ACTION_CANCELLED"), false);

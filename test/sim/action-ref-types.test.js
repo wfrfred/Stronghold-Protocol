@@ -16,18 +16,18 @@ test("Action Refs preserve definition state and covariance across heterogeneous 
             path,
             `
 import type { Ref } from ${source("common/ref")};
+import type { Query } from ${source("common/query")};
 import type { State as BattleState } from ${source("tactical/battle/state")};
 import type { Unit } from ${source("tactical/unit/unit")};
 import type { Action as ActionCapability } from ${source("tactical/unit/capability/action/capability")};
-import type { Action } from ${source("tactical/unit/action/action")};
-import type { Actions } from ${source("tactical/unit/action/actions")};
+import type { Action, View } from ${source("tactical/unit/action/action")};
+import { Actions } from ${source("tactical/unit/action/actions")};
 import type { Definition } from ${source("tactical/unit/action/definition")};
 import { ref, setState } from ${source("tactical/unit/action/action")};
 import { Definitions } from ${source("tactical/unit/action/definitions")};
 import { all, start, get, cancel, replace, getState, replaceState } from ${source("tactical/unit/action/operations")};
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
-type Stored = ReturnType<Actions["values"]>[number];
 declare const battle: BattleState;
 declare const source: Ref<Unit & ActionCapability>;
 declare const action: Action<object, { count: number }>;
@@ -53,9 +53,22 @@ type Host = Assert<Equal<typeof known.host, Ref<Unit & ActionCapability>>>;
 const hostless: Pick<typeof known, "host" | "id"> = { id: 0 };
 type Known = Assert<Equal<typeof known, Ref<Action<object, { count: number }>>>>;
 const weaker: Ref<Action<object, { count: number }>> = specialized;
-const erased: Ref<Stored> = weaker;
+const erased: Ref<View> = weaker;
 const candidates = all(battle);
-type Candidates = Assert<Equal<typeof candidates, Ref<Stored>[]>>;
+type Candidates = Assert<Equal<typeof candidates, readonly Ref<View>[]>>;
+const entries = Actions.empty().add(action);
+const publicEntries: Query<View> = entries.values();
+const exactEntry = entries.get(known);
+type ExactEntry = Assert<Equal<typeof exactEntry, Action<object, { count: number }> | undefined>>;
+entries.replace(known, setState(action, { count: 1 }));
+// @ts-expect-error public views cannot be inserted as complete instances.
+entries.add(get(battle, erased)!);
+// @ts-expect-error public references do not prove writable private state types.
+entries.replace(erased, action);
+// @ts-expect-error a precise reference fixes replacement state inference.
+entries.replace(known, { ...action, state: { count: "wrong" } });
+// @ts-expect-error ordinary definition enumeration hides content callbacks.
+definitions.values().find(value => value.id === "count")!.step;
 cancel(battle, erased, "SCRIPT");
 // @ts-expect-error
 const forged: Ref<Action<object, { count: number }>> = { id: 0 };
@@ -97,6 +110,14 @@ const persistent: Definition<{ uses: number }, { target: string }> = {
         return { state: current, value: false };
     },
 };
+declare const actionHost: Unit & ActionCapability;
+// @ts-expect-error ordinary persistent state queries hide content data.
+actionHost.action.states.get("persistent")!.data;
+const persistentEntry = actionHost.action.states.get("persistent", persistent)!;
+const usage: number = persistentEntry.data.uses;
+actionHost.action.states.replace(persistent, { ...persistentEntry, data: { uses: 2 } });
+// @ts-expect-error the known Definition fixes persistent state inference.
+actionHost.action.states.replace(persistent, { ...persistentEntry, data: { uses: "wrong" } });
 Definitions.empty().add(definition).add(persistent).read("persistent", configured => {
     const stored = getState(battle, source, configured)!;
     // @ts-expect-error

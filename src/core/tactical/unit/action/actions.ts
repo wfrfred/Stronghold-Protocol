@@ -1,20 +1,18 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
-import type { Action, Id } from "./action.js";
+import { Store } from "../../../common/collection/store.js";
+import type { Query } from "../../../common/query.js";
+import type { Ref } from "../../../common/ref.js";
+import type { Action, Id, Snapshot, View } from "./action.js";
 import type { Definition } from "./definition.js";
 
-type StoredAction = Omit<Action, "definition" | "state"> & {
-    readonly definition: Pick<Definition, "id" | "intervalTicks" | "speed">;
-    readonly state: object;
-};
-
 export class Actions {
-    static readonly #empty = new Actions([], 0);
+    static readonly #empty = new Actions(Store.empty<Id, View>(), 0);
 
-    readonly #entries: readonly StoredAction[];
+    readonly #store: Store<Id, View>;
     readonly nextId: Id;
 
-    private constructor(entries: readonly StoredAction[], nextId: Id) {
-        this.#entries = entries;
+    private constructor(store: Store<Id, View>, nextId: Id) {
+        this.#store = store;
         this.nextId = nextId;
     }
 
@@ -23,19 +21,33 @@ export class Actions {
     }
 
     get size(): number {
-        return this.#entries.length;
+        return this.#store.size;
     }
 
-    get(id: Id): StoredAction | undefined;
+    get(id: Id): View | undefined;
+    get<A extends View>(reference: Ref<A>): A | undefined;
     get<P extends object, E extends object>(
         id: Id,
         definition: Definition<P, E>,
     ): Action<P, E> | undefined;
-    get<P extends object, E extends object>(
-        id: Id,
+    get<P extends object, E extends object, A extends View>(
+        reference: Id | Ref<A>,
         definition?: Definition<P, E>,
-    ): StoredAction | Action<P, E> | undefined {
-        const action = this.#entries.find((entry) => entry.id === id);
+    ): View | Action<P, E> | A | undefined {
+        const id = typeof reference === "number" ? reference : reference.id;
+        const action = this.#store.get(id);
+
+        if (
+            action !== undefined &&
+            typeof reference !== "number" &&
+            action.host.id !== reference.host.id
+        ) {
+            return undefined;
+        }
+
+        if (typeof reference !== "number") {
+            return action;
+        }
 
         if (definition === undefined) {
             return action;
@@ -51,17 +63,17 @@ export class Actions {
         id: Id,
         reader: <P extends object, E extends object>(action: Action<P, E>) => R,
     ): R | undefined {
-        const action = this.#entries.find((entry) => entry.id === id);
+        const action = this.#store.get(id);
 
         return action === undefined ? undefined : reader(action as Action);
     }
 
-    values(): readonly StoredAction[] {
-        return this.#entries;
+    values(): Query<View> {
+        return this.#store.values();
     }
 
-    keys(): readonly Id[] {
-        return this.#entries.map(({ id }) => id);
+    keys(): Query<Id> {
+        return this.#store.keys();
     }
 
     add<P extends object, E extends object>(action: Action<P, E>): Actions {
@@ -78,18 +90,21 @@ export class Actions {
             throw new RangeError("action identity overflow");
         }
 
-        return new Actions([...this.#entries, action], nextId);
+        return new Actions(this.#store.add(action.id, action), nextId);
     }
 
-    replace<P extends object, E extends object>(action: Action<P, E>): Actions {
-        const index = this.#entries.findIndex((entry) => entry.id === action.id);
+    replace<P extends object, E extends object>(
+        reference: Ref<Action<P, E>>,
+        action: NoInfer<Action<P, E>>,
+    ): Actions {
+        const previous = this.get(reference);
 
-        if (index < 0) {
+        if (previous === undefined) {
             return this;
         }
-
-        const previous = this.#entries[index]!;
-
+        if (action.id !== reference.id) {
+            throw new TypeError("action identity cannot change");
+        }
         if (previous.definition !== action.definition) {
             throw new TypeError("action definition cannot change");
         }
@@ -103,24 +118,23 @@ export class Actions {
             return this;
         }
 
-        return new Actions(
-            [...this.#entries.slice(0, index), action, ...this.#entries.slice(index + 1)],
-            this.nextId,
-        );
+        return new Actions(this.#store.replace(reference.id, action), this.nextId);
     }
 
     remove(id: Id): Actions {
-        const index = this.#entries.findIndex((entry) => entry.id === id);
+        if (this.#store.get(id) === undefined) {
+            return this;
+        }
 
-        return index < 0
-            ? this
-            : new Actions(
-                  [...this.#entries.slice(0, index), ...this.#entries.slice(index + 1)],
-                  this.nextId,
-              );
+        return new Actions(this.#store.remove(id), this.nextId);
     }
 
-    toJSON(): { readonly instances: readonly StoredAction[]; readonly nextId: Id } {
-        return { instances: this.#entries, nextId: this.nextId };
+    toJSON(): { readonly instances: readonly Snapshot[]; readonly nextId: Id } {
+        return {
+            instances: this.values()
+                .map(({ id }) => this.read<Snapshot>(id, (self) => self)!)
+                .toArray(),
+            nextId: this.nextId,
+        };
     }
 }

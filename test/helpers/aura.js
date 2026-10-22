@@ -36,7 +36,7 @@ export function auraEffect(
     } = {},
 ) {
     const selfOf = (state, context) =>
-        getUnit(state, context.ref.host.id)?.effects.values().find(
+        getUnit(state, context.ref.host.id)?.effects.values().toArray().find(
             (effect) => effect.id === context.ref.id,
         );
     const save = (state, context, update) => {

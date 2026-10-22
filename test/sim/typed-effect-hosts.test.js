@@ -41,7 +41,7 @@ test("Effect installation resolves its typed host against the latest battle", ()
     assert.notEqual(installed.value, undefined);
     assert.equal(getUnit(installed.state, host.id).vitality.hp, 25);
     assert.equal(getUnit(previous, host.id), original);
-    assert.equal(original.effects.values().length, 0);
+    assert.equal(original.effects.values().toArray().length, 0);
 });
 
 test("Effect installation rejects a typed host that has left the battle", () => {
@@ -86,6 +86,8 @@ import { ref } from ${source("unit/query")};
 import type { Locomotion } from ${source("unit/capability/locomotion/capability")};
 import type { Vitality } from ${source("unit/capability/vitality/capability")};
 import type { Definition } from ${source("unit/effect/definition")};
+import { ref as effectRef, type Effect, type View } from ${source("unit/effect/effect")};
+import { Effects } from ${source("unit/effect/effects")};
 import { install } from ${source("unit/effect/operations")};
 declare const battle: BattleState;
 declare const complete: Ref<Unit & Locomotion & Vitality>;
@@ -105,6 +107,21 @@ const vitality: Definition<{ charges: number }, Vitality> = {
 const combined: Definition<object, Locomotion & Vitality> = {
     id: "combined", initialize: () => ({}),
 };
+declare const effect: Effect<{ charges: number }, Locomotion & Vitality>;
+const reference = effectRef(effect);
+const typedHost: Ref<Unit & Locomotion & Vitality> = reference.host;
+const generic: Ref<View> = reference;
+const entries = Effects.empty().add(effect);
+const restored: typeof effect | undefined = entries.get(reference);
+entries.replace(reference, { ...effect, data: { charges: 2 } });
+// @ts-expect-error public effect identity does not retain arbitrary host capabilities.
+const inventedHost: Ref<Unit & Vitality> = generic.host;
+// @ts-expect-error public effect views hide private data.
+entries.get(generic)!.data;
+// @ts-expect-error public references do not prove writable private state types.
+entries.replace(generic, effect);
+// @ts-expect-error a precise reference fixes replacement data inference.
+entries.replace(reference, { ...effect, data: { charges: "wrong" } });
 install(battle, complete, vitality, { data: { charges: 2 } });
 install(battle, complete, combined);
 install(battle, ref(known), vitality);

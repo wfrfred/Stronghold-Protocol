@@ -89,14 +89,14 @@ test("aura runtime: a restored aura refreshes on its first tick without creating
     const runtime = new BattleRuntime(input(host));
     const initial = runtime.snapshot();
     assert.deepEqual(initial.mechanisms, []);
-    assert.equal(initial.units[0].effects.values()[0].definition, aura);
-    assert.deepEqual(initial.units[0].effects.values()[0].data.bindings, []);
+    assert.equal(initial.units[0].effects.values().toArray()[0].definition, aura);
+    assert.deepEqual(initial.units[0].effects.values().toArray()[0].data.bindings, []);
     assert.equal(snapshotAttack(initial, 1), 100);
-    assert.deepEqual(host.effects.values()[0].data.bindings, []);
+    assert.deepEqual(host.effects.values().toArray()[0].data.bindings, []);
     runtime.step();
     const after = runtime.snapshot();
     assert.deepEqual(
-        after.units[0].effects.values()[0].data.bindings.map((binding) => binding.unitId),
+        after.units[0].effects.values().toArray()[0].data.bindings.map((binding) => binding.unitId),
         [1],
     );
     assert.equal(snapshotAttack(after, 1), 120);
@@ -124,7 +124,7 @@ test("aura runtime: predefined, deployment and spawning join before the same tic
                     id,
                     view
                         .getUnit(id)
-                        .effects.values().some((effect) => effect.definition === receiver),
+                        .effects.values().toArray().some((effect) => effect.definition === receiver),
                 ]),
             );
             return state;
@@ -183,7 +183,7 @@ test("aura runtime: predefined, deployment and spawning join before the same tic
         ],
     ]);
     const after = runtime.snapshot();
-    const auraInstance = after.units[0].effects.values().find(
+    const auraInstance = after.units[0].effects.values().toArray().find(
         (effect) => effect.definition === aura,
     );
     assert.deepEqual(
@@ -227,7 +227,7 @@ test("aura runtime: movement departure is observed at the next aura tick", () =>
     assert.equal(snapshotAttack(before, 2), 120);
     assert.equal(snapshotAttack(departed, 2), 120);
     assert.equal(
-        departed.units[0].effects.values()[0].data.bindings.some(
+        departed.units[0].effects.values().toArray()[0].data.bindings.some(
             (binding) => binding.unitId === 2,
         ),
         true,
@@ -236,7 +236,7 @@ test("aura runtime: movement departure is observed at the next aura tick", () =>
     const refreshed = runtime.snapshot();
     assert.equal(snapshotAttack(refreshed, 2), 100);
     assert.equal(
-        refreshed.units[0].effects.values()[0].data.bindings.some(
+        refreshed.units[0].effects.values().toArray()[0].data.bindings.some(
             (binding) => binding.unitId === 2,
         ),
         false,

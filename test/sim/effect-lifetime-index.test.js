@@ -31,7 +31,7 @@ test("scope index tracks remote dependencies and preserves captured indexes", ()
     assert.equal(battlefieldView(battle).effectLifetimes, unrelated);
     battle = effects.end(battle, parent);
     assert.deepEqual(dependents(battlefieldView(battle).effectLifetimes, { type: "EFFECT", ref: parent }), []);
-    assert.deepEqual(getUnit(battle, 9).effects.values(), []);
+    assert.deepEqual(getUnit(battle, 9).effects.values().toArray(), []);
 });
 
 test("binding rejects scope cycles while sharing independent scopes", () => {
@@ -50,6 +50,6 @@ test("binding rejects scope cycles while sharing independent scopes", () => {
         [second],
     );
     battle = closeLifetime(battle, { type: "UNIT", unitId: 1 });
-    assert.deepEqual(getUnit(battle, 1).effects.values(), []);
-    assert.deepEqual(getUnit(battle, 2).effects.values(), []);
+    assert.deepEqual(getUnit(battle, 1).effects.values().toArray(), []);
+    assert.deepEqual(getUnit(battle, 2).effects.values().toArray(), []);
 });

@@ -156,7 +156,7 @@ test("ammo runtime: the final ordinary attack buffs every target before ending t
     "DAMAGE", "DAMAGE", "DAMAGE", "SKILL_FINISHED",
   ]);
   assert.equal(source(runtime).skill.active, null);
-  assert.equal(source(runtime).effects.values().length === 0, true);
+  assert.equal(source(runtime).effects.values().toArray().length === 0, true);
   assert.equal(released.events.filter(({ type }) => type === "SKILL_FINISHED").length, 1);
 });
 
@@ -180,7 +180,7 @@ test("ammo runtime: hiding the source after damage still pays for the sampled ac
   assert.deepEqual(damageEvents(emitted).map(({ amount }) => amount), [200]);
   assert.equal(source(runtime).spatialPresence.present, false);
   assert.equal(source(runtime).skill.active, null);
-  assert.equal(source(runtime).effects.values().length, 0);
+  assert.equal(source(runtime).effects.values().toArray().length, 0);
   assert.deepEqual(emitted.events.filter(({ type }) => type === "SKILL_FINISHED").map(({ activationId }) => activationId), [0]);
   assert.equal(emitted.events.some(({ type }) => type === "ACTION_CANCELLED"), false);
 });
@@ -188,12 +188,12 @@ test("ammo runtime: hiding the source after damage still pays for the sampled ac
 test("ammo runtime: cancellation during windup spends no ammunition", () => {
   const runtime = scenario({ ammo: 3, windupTicks: 2 });
   runtime.step([{ type: "ACTIVATE_SKILL", unitId: 0 }]);
-  const ref = actionRef(runtime.snapshot().units.find(unit => unit.id === 0).action.instances.values()[0]);
+  const ref = actionRef(runtime.snapshot().units.find(unit => unit.id === 0).action.instances.values().toArray()[0]);
   const cancelled = runtime.step([{ type: "CANCEL_ACTION_EXECUTION", ref }]);
   assert.deepEqual(cancelled.events.filter(({ type }) => type === "ACTION_CANCELLED").map(({ reason }) => reason), ["CANCELLED"]);
   assert.deepEqual(damageEvents(cancelled), []);
   assert.equal(source(runtime).skill.active.sustain.remaining, 3);
-  assert.deepEqual(runtime.snapshot().units.find(unit => unit.id === 0).action.instances.values(), []);
+  assert.deepEqual(runtime.snapshot().units.find(unit => unit.id === 0).action.instances.values().toArray(), []);
   assert.equal(runtime.step().events.some(({ type }) => type === "ACTION_RELEASED"), false);
   assert.equal(source(runtime).skill.active.sustain.remaining, 3);
 });
@@ -208,7 +208,7 @@ test("ammo runtime: release interruption cancels windup without spending ammunit
   assert.deepEqual(damageEvents(interrupted), []);
   assert.equal(source(runtime).skill.active.sustain.remaining, 3);
   assert.ok(source(runtime).action.states.get("normal").cooldown.readyAtTick >= 17);
-  assert.deepEqual(runtime.snapshot().units.find(unit => unit.id === 0).action.instances.values(), []);
+  assert.deepEqual(runtime.snapshot().units.find(unit => unit.id === 0).action.instances.values().toArray(), []);
 });
 
 test("ammo runtime: a content-defined follow-up preserves one ammunition payment across ticks", () => {
@@ -238,7 +238,7 @@ test("ammo runtime: a content-defined follow-up preserves one ammunition payment
   assert.deepEqual(damageEvents(followUp).map(({ amount }) => amount), [200, 200]);
   assert.equal(source(runtime).skill.active.sustain.remaining, 2);
   assert.equal(followUp.events.filter(({ type }) => type === "ACTION_FINISHED").length, 1);
-  assert.deepEqual(runtime.snapshot().units.find(unit => unit.id === 0).action.instances.values(), []);
+  assert.deepEqual(runtime.snapshot().units.find(unit => unit.id === 0).action.instances.values().toArray(), []);
 });
 
 test("ammo runtime: the last released projectile survives skill completion and retains buffed attack", () => {
@@ -256,7 +256,7 @@ test("ammo runtime: the last released projectile survives skill completion and r
   assert.deepEqual(damageEvents(launched), []);
   assert.equal(launched.events.filter(({ type }) => type === "SKILL_FINISHED").length, 1);
   assert.equal(source(runtime).skill.active, null);
-  assert.equal(source(runtime).effects.values().length === 0, true);
+  assert.equal(source(runtime).effects.values().toArray().length === 0, true);
   assert.equal(runtime.snapshot().projectiles.instances.length, 1);
   assert.equal(runtime.snapshot().projectiles.instances[0].cachedAtk, 200);
   assert.deepEqual(runtime.snapshot().projectiles.instances[0].position, [0, 0]);

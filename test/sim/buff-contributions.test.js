@@ -105,13 +105,13 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
     const first = battlefieldView(work);
     apply(20, 0.9, 15, 1);
     close(effective(), 140);
-    let instance = getUnit(work, 0).effects.values()[0];
+    let instance = getUnit(work, 0).effects.values().toArray()[0];
     assert.equal(instance.source, 10);
     assert.equal(instance.data.defenseRatio, 0.2);
     assert.equal(instance.data.stackCount, 2);
     assert.equal(deadline(instance), 15);
-    assert.equal(getUnit(work, 0).effects.values().length, 1);
-    assert.equal(first.getUnit(0).effects.values()[0].data.stackCount, 1);
+    assert.equal(getUnit(work, 0).effects.values().toArray().length, 1);
+    assert.equal(first.getUnit(0).effects.values().toArray()[0].data.stackCount, 1);
     assert.equal(starts, 1);
     const address = { host: { id: 0 }, id: instance.id };
     work = effects.setEnabled(work, address, false);
@@ -132,7 +132,7 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
     const originalUnit = original.getUnit(0);
     assert.equal(resolveDefense(originalUnit.vitality, originalUnit.definition.vitality, { unit: originalUnit, battlefield: original }).defense, 100);
     assert.equal(starts, 1);
-    instance = getUnit(work, 0).effects.values()[0];
+    instance = getUnit(work, 0).effects.values().toArray()[0];
     assert.equal(instance, undefined);
 });
 
@@ -188,7 +188,7 @@ test("Buff contribution integration: only effective layer growth resamples the r
     const power = () => resolveAttack(work, unitRef(getUnit(work, 0)));
     assert.equal(power(), 150);
     const apply = (currentSourceAttack, tick, expiresAtTick) => {
-        const current = getUnit(work, 0).effects.values()[0];
+        const current = getUnit(work, 0).effects.values().toArray()[0];
         const plan = policy.plan(
             { stackCount: current.data.stackCount, expiresAtTick: deadline(current) },
             { stackCount: 1, expiresAtTick },
@@ -210,7 +210,7 @@ test("Buff contribution integration: only effective layer growth resamples the r
     assert.equal(power(), 300);
     assert.equal(apply(800, 3, 40).reloadModifiers, false);
     assert.equal(power(), 300);
-    const current = getUnit(work, 0).effects.values()[0];
+    const current = getUnit(work, 0).effects.values().toArray()[0];
     assert.equal(current.data.stackCount, 3);
     assert.equal(current.data.sourceAttack, 200);
     assert.equal(deadline(current), 40);

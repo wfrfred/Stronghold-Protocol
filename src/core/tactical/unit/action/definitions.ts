@@ -1,15 +1,15 @@
 import { assertNonnegativeNumber } from "../../../common/assert.js";
-import type { Definition, Id } from "./definition.js";
-
-type StoredDefinition = Pick<Definition, "id" | "intervalTicks" | "speed">;
+import { Store } from "../../../common/collection/store.js";
+import type { Query } from "../../../common/query.js";
+import type { Definition, Id, View } from "./definition.js";
 
 export class Definitions {
-    static readonly #empty = new Definitions([]);
+    static readonly #empty = new Definitions(Store.empty<Id, View>());
 
-    readonly #entries: readonly StoredDefinition[];
+    readonly #store: Store<Id, View>;
 
-    private constructor(entries: readonly StoredDefinition[]) {
-        this.#entries = entries;
+    private constructor(store: Store<Id, View>) {
+        this.#store = store;
     }
 
     static empty(): Definitions {
@@ -17,10 +17,10 @@ export class Definitions {
     }
 
     get size(): number {
-        return this.#entries.length;
+        return this.#store.size;
     }
 
-    get(id: Id): StoredDefinition | undefined;
+    get(id: Id): View | undefined;
     get<P extends object, E extends object>(
         id: Id,
         definition: Definition<P, E>,
@@ -28,8 +28,8 @@ export class Definitions {
     get<P extends object, E extends object>(
         id: Id,
         definition?: Definition<P, E>,
-    ): StoredDefinition | Definition<P, E> | undefined {
-        const stored = this.#entries.find((entry) => entry.id === id);
+    ): View | Definition<P, E> | undefined {
+        const stored = this.#store.get(id);
 
         if (definition === undefined) {
             return stored;
@@ -42,30 +42,30 @@ export class Definitions {
         id: Id,
         reader: <P extends object, E extends object>(definition: Definition<P, E>) => R,
     ): R | undefined {
-        const definition = this.#entries.find((entry) => entry.id === id);
+        const definition = this.#store.get(id);
 
         return definition === undefined ? undefined : reader(definition as Definition);
     }
 
-    values(): readonly StoredDefinition[] {
-        return this.#entries;
+    values(): Query<View> {
+        return this.#store.values();
     }
 
-    keys(): readonly Id[] {
-        return this.#entries.map(({ id }) => id);
+    keys(): Query<Id> {
+        return this.#store.keys();
     }
 
     add<P extends object, E extends object>(definition: Definition<P, E>): Definitions {
         if (definition.id.length === 0) {
             throw new TypeError("action definition identity must be nonempty");
         }
-        if (this.#entries.some(({ id }) => id === definition.id)) {
+        if (this.#store.get(definition.id) !== undefined) {
             throw new RangeError(`duplicate action definition: ${definition.id}`);
         }
 
         assertNonnegativeNumber(definition.intervalTicks, "action base interval");
         assertNonnegativeNumber(definition.speed, "action base speed");
 
-        return new Definitions([...this.#entries, definition]);
+        return new Definitions(this.#store.add(definition.id, definition));
     }
 }

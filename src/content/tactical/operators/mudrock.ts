@@ -89,16 +89,19 @@ export function readShield(
     unit: Unit,
 ): { readonly layers: number; readonly timer: number } | undefined {
     const effect = unit.effects.values().find((entry) => entry.definition.id === SHIELD_ID);
-    const data = effect?.data;
 
-    return effect?.status === "ACTIVE" &&
-        data !== undefined &&
+    if (effect?.status !== "ACTIVE") {
+        return undefined;
+    }
+
+    return unit.effects.read(effect.id, ({ data }) =>
         "layers" in data &&
         typeof data.layers === "number" &&
         "timer" in data &&
         typeof data.timer === "number"
-        ? { layers: data.layers, timer: data.timer }
-        : undefined;
+            ? { layers: data.layers, timer: data.timer }
+            : undefined,
+    );
 }
 
 function value(entries: Profile["moduleTrait"], key: string): number {

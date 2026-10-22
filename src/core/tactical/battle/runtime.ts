@@ -124,7 +124,7 @@ export class BattleRuntime {
             predefinedPresence,
             projectiles: {
                 nextProjectileId: execution.nextProjectileId,
-                instances: battlefield.projectiles.values(),
+                instances: battlefield.projectiles.snapshot(),
             },
             execution,
             units: view.unitIds.map((id) => copy(view.getUnit(id)!)),

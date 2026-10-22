@@ -234,7 +234,7 @@ test("effect lifetimes: closing a host never reenables its suppressed effects", 
     battle = closeLifetime(battle, { type: "UNIT", unitId: 0 }, "RETREAT");
 
     assert.deepEqual(enabled, []);
-    assert.deepEqual(getUnit(battle, 0).effects.values(), []);
+    assert.deepEqual(getUnit(battle, 0).effects.values().toArray(), []);
 });
 
 test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a child's ending", () => {
@@ -282,7 +282,7 @@ test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a
     battle = effect.end(battle, ref);
 
     assert.equal(getUnit(battle, 0), undefined);
-    assert.deepEqual(getUnit(battle, 1).effects.values(), []);
+    assert.deepEqual(getUnit(battle, 1).effects.values().toArray(), []);
     assert.deepEqual(
         battle.removedUnits.map(({ unitId, reason }) => [unitId, reason]),
         [[0, "DEATH"]],

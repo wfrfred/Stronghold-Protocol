@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
+import { ref } from "../../dist/core/tactical/unit/effect/effect.js";
 
 const instance = (id, definition, data) => ({
     id,
@@ -22,18 +23,18 @@ test("Effects stores heterogeneous data and updates retain preceding immutable c
     const first = empty.add(shieldEffect);
     const both = first.add(poisonEffect);
     const consumed = { ...shieldEffect, data: { charges: 1 } };
-    const updated = both.replace(consumed);
+    const updated = both.replace(ref(shieldEffect), consumed);
     const removed = updated.remove(0);
 
-    assert.deepEqual(empty.values(), []);
-    assert.deepEqual(first.values(), [shieldEffect]);
-    assert.deepEqual(both.values(), [shieldEffect, poisonEffect]);
+    assert.deepEqual(empty.values().toArray(), []);
+    assert.deepEqual(first.values().toArray(), [shieldEffect]);
+    assert.deepEqual(both.values().toArray(), [shieldEffect, poisonEffect]);
     assert.equal(both.get(0, shield).data.charges, 2);
     assert.equal(updated.get(0, shield).data.charges, 1);
     assert.equal(updated.get(1, poison), poisonEffect);
     assert.equal(updated.get(0), consumed);
     assert.equal(removed.get(0), undefined);
-    assert.deepEqual(removed.values(), [poisonEffect]);
+    assert.deepEqual(removed.values().toArray(), [poisonEffect]);
     assert.equal(removed.nextId, 2, "deletion preserves instance identity allocation progress");
 });
 
@@ -53,17 +54,17 @@ test("Effects rejects duplicate, skipped and reused identities without changing 
     const definition = { id: "shield", initialize: () => ({ charges: 2 }) };
     const first = instance(0, definition, definition.initialize());
     const effects = Effects.empty().add(first);
-    const entries = effects.values();
+    const entries = effects.values().toArray();
 
     assert.throws(() => effects.add(first), RangeError);
     assert.throws(() => effects.add(instance(2, definition, { charges: 1 })), RangeError);
-    assert.equal(effects.values(), entries);
+    assert.deepEqual(effects.values().toArray(), entries);
     assert.equal(effects.get(0, definition), first);
     assert.equal(effects.nextId, 1);
 
     const removed = effects.remove(0);
     assert.throws(() => removed.add(first), RangeError);
-    assert.deepEqual(removed.values(), []);
+    assert.deepEqual(removed.values().toArray(), []);
     assert.equal(removed.nextId, 1);
     assert.equal(removed.add(instance(1, definition, { charges: 1 })).nextId, 2);
 });
@@ -73,13 +74,13 @@ test("Effects replacement preserves the installed Definition object", () => {
     const differentDefinition = { id: "shield", initialize: () => ({ charges: 10 }) };
     const effect = instance(0, definition, definition.initialize());
     const effects = Effects.empty().add(effect);
-    const entries = effects.values();
+    const entries = effects.values().toArray();
 
     assert.throws(
-        () => effects.replace({ ...effect, definition: differentDefinition }),
+        () => effects.replace(ref(effect), { ...effect, definition: differentDefinition }),
         TypeError,
     );
-    assert.equal(effects.values(), entries);
+    assert.deepEqual(effects.values().toArray(), entries);
     assert.equal(effects.get(0, definition), effect);
     assert.equal(effects.get(0, differentDefinition), undefined);
     assert.equal(effects.nextId, 1);
@@ -98,7 +99,7 @@ test("Effects only stores instances, while JSON preserves their data and allocat
     };
     const effect = instance(0, definition, { charges: 3 });
     const stored = Effects.empty().add(effect);
-    const disabled = stored.replace({ ...effect, enabled: false });
+    const disabled = stored.replace(ref(effect), { ...effect, enabled: false });
     const projected = JSON.parse(JSON.stringify({ effects: disabled }));
 
     assert.equal(disabled.read(0, (entry) => entry.definition.id), "stored-only");
@@ -115,7 +116,7 @@ test("Effects only stores instances, while JSON preserves their data and allocat
         }],
         nextId: 1,
     });
-    assert.deepEqual(disabled.remove(0).values(), []);
+    assert.deepEqual(disabled.remove(0).values().toArray(), []);
     assert.equal(disabled.get(0).enabled, false);
     assert.equal(projected.effects.get, undefined, "JSON output does not restore an Effects container");
     assert.equal(projected.effects.instances[0].definition.onTick, undefined);

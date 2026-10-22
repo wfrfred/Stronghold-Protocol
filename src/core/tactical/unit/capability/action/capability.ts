@@ -1,23 +1,16 @@
 import type { Context } from "../../query.js";
 import type { State as BattleState, Result } from "../../../battle/state.js";
 import type { Unit, Definition as UnitDefinition } from "../../unit.js";
-import type {
-    Definition as ActionDefinition,
-    Id as DefinitionId,
-} from "../../action/definition.js";
+import type { Id as DefinitionId } from "../../action/definition.js";
 import type { Definitions } from "../../action/definitions.js";
-import type { State as ActionState } from "../../action/state.js";
 import { Actions } from "../../action/actions.js";
+import { States } from "../../action/states.js";
 import * as cooldown from "../../action/cooldown.js";
 import * as contribution from "../../contribution/contribution.js";
 import type * as attribute from "../../contribution/attribute.js";
 import * as hook from "../../hook/hook.js";
 import type { Hook as ReleaseHook, ReleasedHook } from "./release.js";
 import { period } from "./timing.js";
-
-type StoredState = Omit<ActionState, "definition"> & {
-    readonly definition: Pick<ActionDefinition, "id" | "intervalTicks" | "speed">;
-};
 
 export interface Definition {
     readonly definitions: Definitions;
@@ -34,7 +27,7 @@ export interface Rule {
 }
 
 export interface State {
-    readonly states: ReadonlyMap<DefinitionId, StoredState>;
+    readonly states: States;
     readonly instances: Actions;
     readonly interval: readonly contribution.Contribution<attribute.Input<Context>>[];
     readonly speed: readonly contribution.Contribution<attribute.Input<Context>>[];
@@ -63,13 +56,13 @@ export function createDefinition(definition: Definition): Definition {
 }
 
 export function initialize(battle: BattleState, definition: Definition): Result<State> {
-    const states = new Map<DefinitionId, StoredState>();
+    let states = States.empty();
 
     for (const id of definition.definitions.keys()) {
         definition.definitions.read(id, (configured) => {
             const initialized = configured.initialize(battle);
             battle = initialized.state;
-            states.set(id, {
+            states = states.add({
                 definition: configured,
                 data: initialized.value,
                 cooldown: cooldown.initialize(

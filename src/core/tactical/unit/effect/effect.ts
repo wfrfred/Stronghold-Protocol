@@ -1,9 +1,8 @@
 import type { Id as UnitId, Unit } from "../unit.js";
-import type { Actions } from "../action/actions.js";
+import type { View as ActionView } from "../action/action.js";
 import type { Burst } from "../capability/elemental/burst.js";
 import type { Activation as SkillActivation } from "../capability/skill/activation.js";
 import type { Definition } from "./definition.js";
-import type { Effects } from "./effects.js";
 import type { Identified, Ref } from "../../../common/ref.js";
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 
@@ -11,32 +10,38 @@ export type Id = number;
 
 export type Lifetime =
     | { readonly type: "UNIT"; readonly unitId: UnitId }
-    | { readonly type: "ACTION"; readonly ref: Ref<ReturnType<Actions["values"]>[number]> }
+    | { readonly type: "ACTION"; readonly ref: Ref<ActionView> }
     | { readonly type: "SKILL"; readonly ref: Ref<SkillActivation> }
     | { readonly type: "ELEMENTAL_BURST"; readonly ref: Ref<Burst> }
-    | { readonly type: "EFFECT"; readonly ref: Ref<StoredEffect> };
+    | { readonly type: "EFFECT"; readonly ref: Ref<View> };
 
 export type Scope = Lifetime | { readonly type: "TICK"; readonly tick: number };
 
 export type Status = "INSTALLING" | "INACTIVE" | "ACTIVE" | "ENDING";
 
-type StoredEffect = ReturnType<Effects["values"]>[number];
-
-export interface Effect<S extends object = object, H extends object = object> extends Identified<{
+export interface View<H extends object = object> extends Identified<{
     readonly host: Ref<Unit & H>;
     readonly id: Id;
 }> {
     readonly id: Id;
     readonly host: Ref<Unit & H>;
-    readonly definition: Definition<S, H>;
-    readonly data: S;
+    readonly definition: Pick<Definition<object>, "id" | "group">;
     readonly source: UnitId | null;
     readonly scopes: readonly Scope[];
     readonly enabled: boolean;
     readonly status: Status;
 }
 
-export function ref<E extends StoredEffect>(effect: E): Ref<E> {
+export interface Effect<S extends object = object, H extends object = object> extends View<H> {
+    readonly definition: Definition<S, H>;
+    readonly data: S;
+}
+
+export interface Snapshot extends View {
+    readonly data: unknown;
+}
+
+export function ref<E extends View>(effect: E): Ref<E> {
     return { host: effect.host, id: effect.id } as Ref<E>;
 }
 

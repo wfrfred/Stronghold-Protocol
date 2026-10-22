@@ -12,7 +12,5 @@ export function read<R>(
     id: Id,
     reader: <P extends object, E extends object>(self: State<P, E>) => R,
 ): R | undefined {
-    const self = units.get(battle, source)?.action.states.get(id);
-
-    return self === undefined ? undefined : reader(self as State);
+    return units.get(battle, source)?.action.states.read(id, reader);
 }

@@ -101,7 +101,7 @@ test("damage pipeline: barrier before doubling takes 400 HP; doubling before bar
         assert.equal(result.value.received.amount, expected);
         assert.equal(result.value.application.hpLoss, expected);
         assert.equal(stateOf(result.state, 2, shield).remainingAmount, 0);
-        assert.equal(target.effects.values()[0].data.remainingAmount, 500);
+        assert.equal(target.effects.values().toArray()[0].data.remainingAmount, 500);
     }
 });
 
@@ -114,7 +114,7 @@ test("damage pipeline: reduction and complete absorption consume barrier budget 
     assert.equal(result.value.received.cancellation, null);
     assert.equal(result.value.application.hpLoss, 0);
     assert.equal(stateOf(result.state, 2, shield).remainingAmount, 200);
-    assert.equal(target.effects.values()[0].data.remainingAmount, 800);
+    assert.equal(target.effects.values().toArray()[0].data.remainingAmount, 800);
 });
 
 test("damage pipeline: Effect overwriting gates hooks while retaining suppressed instances", () => {
@@ -122,7 +122,7 @@ test("damage pipeline: Effect overwriting gates hooks while retaining suppressed
     const strong = rule("strong", "receiving", scaleReceived(3), 0, { group: { id: "fragile", priority: 3 } });
     const battle = workFor(unit(1), attach(attach(unit(2), weak), strong));
     assert.equal(settle(battle, request(100)).value.application.hpLoss, 300);
-    assert.deepEqual(getUnit(battle, 2).effects.values().map((self) => self.status), ["INACTIVE", "ACTIVE"]);
+    assert.deepEqual(getUnit(battle, 2).effects.values().toArray().map((self) => self.status), ["INACTIVE", "ACTIVE"]);
 });
 
 test("damage pipeline: Contribution groups and Effect groups have separate responsibilities", () => {

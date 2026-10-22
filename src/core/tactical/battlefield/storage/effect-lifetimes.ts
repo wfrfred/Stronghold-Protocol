@@ -1,10 +1,8 @@
 import type { Unit } from "../../unit/unit.js";
-import { key, ref as effectRef, type Lifetime } from "../../unit/effect/effect.js";
+import { key, ref as effectRef, type Lifetime, type View } from "../../unit/effect/effect.js";
 import type { Ref } from "../../../common/ref.js";
 
-type RefBucket = ReadonlyMap<string, Ref<StoredEffect>>;
-
-type StoredEffect = ReturnType<Unit["effects"]["values"]>[number];
+type RefBucket = ReadonlyMap<string, Ref<View>>;
 
 export interface Index {
     readonly dependents: ReadonlyMap<string, RefBucket>;
@@ -15,7 +13,7 @@ export interface UnitTransition {
     readonly nextUnit: Unit | undefined;
 }
 
-function relationKeys(instance: StoredEffect | undefined): readonly string[] {
+function relationKeys(instance: View | undefined): readonly string[] {
     return instance === undefined || instance.status === "ENDING"
         ? []
         : [
@@ -26,7 +24,7 @@ function relationKeys(instance: StoredEffect | undefined): readonly string[] {
 }
 
 export function project(units: Iterable<Unit>): Index {
-    const dependents = new Map<string, Map<string, Ref<StoredEffect>>>();
+    const dependents = new Map<string, Map<string, Ref<View>>>();
 
     for (const unit of units) {
         for (const instance of unit.effects.values()) {
@@ -51,9 +49,9 @@ export function project(units: Iterable<Unit>): Index {
 
 export function derive(index: Index, transitions: readonly UnitTransition[]): Index {
     let dependents: Map<string, RefBucket> | undefined;
-    const editedBuckets = new Map<string, Map<string, Ref<StoredEffect>>>();
+    const editedBuckets = new Map<string, Map<string, Ref<View>>>();
 
-    const editBucket = (key: string): Map<string, Ref<StoredEffect>> => {
+    const editBucket = (key: string): Map<string, Ref<View>> => {
         let bucket = editedBuckets.get(key);
 
         if (bucket === undefined) {
@@ -64,10 +62,7 @@ export function derive(index: Index, transitions: readonly UnitTransition[]): In
 
         return bucket;
     };
-    const changeRelations = (
-        before: StoredEffect | undefined,
-        after: StoredEffect | undefined,
-    ): void => {
+    const changeRelations = (before: View | undefined, after: View | undefined): void => {
         if (
             before === after ||
             (before !== undefined &&
@@ -95,16 +90,18 @@ export function derive(index: Index, transitions: readonly UnitTransition[]): In
     };
 
     for (const { previousUnit, nextUnit } of transitions) {
-        const previousInstances = previousUnit?.effects.values();
-        const nextInstances = nextUnit?.effects.values();
+        const previousEffects = previousUnit?.effects;
+        const nextEffects = nextUnit?.effects;
 
-        if (previousInstances === nextInstances) {
+        if (previousEffects === nextEffects) {
             continue;
         }
 
-        const previousById = new Map(previousInstances?.map((instance) => [instance.id, instance]));
+        const previousById = new Map(
+            previousEffects?.values().map((instance) => [instance.id, instance] as const),
+        );
 
-        for (const instance of nextInstances ?? []) {
+        for (const instance of nextEffects?.values() ?? []) {
             changeRelations(previousById.get(instance.id), instance);
             previousById.delete(instance.id);
         }
@@ -126,7 +123,7 @@ export function derive(index: Index, transitions: readonly UnitTransition[]): In
     return dependents === undefined ? index : { dependents };
 }
 
-export function dependents(index: Index, lifetime: Lifetime): readonly Ref<StoredEffect>[] {
+export function dependents(index: Index, lifetime: Lifetime): readonly Ref<View>[] {
     return [...(index.dependents.get(key(lifetime))?.values() ?? [])].sort(
         (left, right) => left.host.id - right.host.id || left.id - right.id,
     );

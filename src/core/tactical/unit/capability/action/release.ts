@@ -1,28 +1,26 @@
 import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
 import type { Ref } from "../../../../common/ref.js";
 import type { State as BattleState, Result } from "../../../battle/state.js";
-import type { Actions } from "../../action/actions.js";
+import type { View as ActionView } from "../../action/action.js";
 import * as actions from "../../action/operations.js";
 import type { Unit } from "../../unit.js";
 import * as units from "../../query.js";
 import * as hook from "../../hook/hook.js";
 import type { Action } from "./capability.js";
 
-type StoredAction = ReturnType<Actions["values"]>[number];
-
 export type Directive =
     { readonly type: "CONTINUE" } | { readonly type: "INTERRUPT"; readonly recoveryTicks: number };
 
 export interface Context {
     readonly source: Ref<Unit & Action>;
-    readonly action: Ref<StoredAction>;
+    readonly action: Ref<ActionView>;
 }
 
 export type Hook = hook.Hook<Context, Directive>;
 
 export type ReleasedHook = hook.Hook<Context, void>;
 
-export function beforeRelease(battle: BattleState, ref: Ref<StoredAction>): Result<Directive> {
+export function beforeRelease(battle: BattleState, ref: Ref<ActionView>): Result<Directive> {
     const action = actions.get(battle, ref);
 
     if (action === undefined) {
@@ -53,7 +51,7 @@ export function beforeRelease(battle: BattleState, ref: Ref<StoredAction>): Resu
     return result;
 }
 
-export function released(battle: BattleState, ref: Ref<StoredAction>): BattleState {
+export function released(battle: BattleState, ref: Ref<ActionView>): BattleState {
     const action = actions.get(battle, ref);
 
     if (action === undefined) {

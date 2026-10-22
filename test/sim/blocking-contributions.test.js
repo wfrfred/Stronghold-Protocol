@@ -98,7 +98,7 @@ const change = (work, effect, next, setting) => {
         work,
         effectAddress,
         setData(
-            getUnit(work, effectAddress.host.id).effects.values().find(
+            getUnit(work, effectAddress.host.id).effects.values().toArray().find(
                 (instance) => instance.id === effectAddress.id,
             ),
             next,
@@ -481,7 +481,7 @@ test("blocking capacity: native stack renewal and terminal cleanup update real b
             Array.from({ length: remaining }, (_, index) => index + 1),
         );
     }
-    assert.deepEqual(h.state.units.get(0).effects.values(), []);
+    assert.deepEqual(h.state.units.get(0).effects.values().toArray(), []);
     assert.equal(original.units.get(0).blocker.capacity.length, 0);
 });
 

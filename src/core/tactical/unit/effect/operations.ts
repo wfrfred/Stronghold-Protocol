@@ -21,11 +21,10 @@ import {
     ref as effectRef,
     type Scope,
     type Status,
+    type View,
 } from "./effect.js";
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import { dependents } from "../../battlefield/storage/effect-lifetimes.js";
-
-type StoredEffect = ReturnType<Unit["effects"]["values"]>[number];
 
 export interface Initial<S extends object> {
     readonly source?: Id | null;
@@ -34,8 +33,8 @@ export interface Initial<S extends object> {
     readonly enabled?: boolean;
 }
 
-export function get<E extends StoredEffect>(battle: BattleState, ref: Ref<E>): E | undefined {
-    return units.get(battle, ref.host)?.effects.get(ref.id) as E | undefined;
+export function get<E extends View>(battle: BattleState, ref: Ref<E>): E | undefined {
+    return units.get(battle, ref.host)?.effects.get(ref);
 }
 
 export function install<S extends object, H extends object>(
@@ -98,17 +97,13 @@ export function replaceEffect<S extends object, H extends object>(
     }
 
     return transitionUnit(battle, ref.host.id, (unit) => {
-        const effects = unit.effects.replace(effect);
+        const effects = unit.effects.replace(ref, effect);
 
         return effects === unit.effects ? unit : { ...unit, effects };
     });
 }
 
-export function setEnabled(
-    battle: BattleState,
-    ref: Ref<StoredEffect>,
-    enabled: boolean,
-): BattleState {
+export function setEnabled(battle: BattleState, ref: Ref<View>, enabled: boolean): BattleState {
     const instance = get(battle, ref);
 
     if (instance === undefined || instance.status === "ENDING" || instance.enabled === enabled) {
@@ -122,7 +117,7 @@ export function setEnabled(
 
 export function bindLifetime(
     battle: BattleState,
-    ref: Ref<StoredEffect>,
+    ref: Ref<View>,
     lifetime: Lifetime,
 ): Result<boolean> {
     const instance = get(battle, ref);
@@ -141,7 +136,7 @@ export function bindLifetime(
     return { state: battle, value: true };
 }
 
-export function end(battle: BattleState, ref: Ref<StoredEffect>, reason = "EXPLICIT"): BattleState {
+export function end(battle: BattleState, ref: Ref<View>, reason = "EXPLICIT"): BattleState {
     const instance = get(battle, ref);
 
     if (instance === undefined || instance.status === "ENDING") {
@@ -195,10 +190,11 @@ export function endDependents(
     const roots = dependents(battlefieldView(battle).effectLifetimes, lifetime);
 
     if (lifetime.type === "UNIT") {
-        const hosted = getUnit(battle, lifetime.unitId)?.effects.values() ?? [];
+        const hosted =
+            getUnit(battle, lifetime.unitId)?.effects.values().map(effectRef).toArray() ?? [];
 
-        for (const instance of hosted) {
-            battle = end(battle, effectRef(instance), reason);
+        for (const ref of hosted) {
+            battle = end(battle, ref, reason);
         }
     }
 
@@ -305,7 +301,7 @@ function available(battle: BattleState, lifetime: Lifetime): boolean {
 
 function change(
     battle: BattleState,
-    ref: Ref<StoredEffect>,
+    ref: Ref<View>,
     changes: {
         readonly status?: Status;
         readonly enabled?: boolean;
@@ -319,7 +315,7 @@ function change(
     );
 }
 
-function shouldBeActive(battle: BattleState, instance: StoredEffect, unit: Unit): boolean {
+function shouldBeActive(battle: BattleState, instance: View, unit: Unit): boolean {
     if (
         !instance.enabled ||
         instance.status === "ENDING" ||
@@ -346,7 +342,7 @@ function shouldBeActive(battle: BattleState, instance: StoredEffect, unit: Unit)
     );
 }
 
-function updateStatus(battle: BattleState, ref: Ref<StoredEffect>): BattleState {
+function updateStatus(battle: BattleState, ref: Ref<View>): BattleState {
     const unit = getUnit(battle, ref.host.id);
     const instance = get(battle, ref);
 
@@ -376,9 +372,12 @@ function updateStatus(battle: BattleState, ref: Ref<StoredEffect>): BattleState 
 }
 
 function reconcileGroupActivity(battle: BattleState, unitId: Id, groupId: string): BattleState {
-    const refs = (getUnit(battle, unitId)?.effects.values() ?? [])
-        .filter((instance) => instance.definition.group?.id === groupId)
-        .map(effectRef);
+    const refs =
+        getUnit(battle, unitId)
+            ?.effects.values()
+            .filter((instance) => instance.definition.group?.id === groupId)
+            .map(effectRef)
+            .toArray() ?? [];
 
     for (const ref of refs) {
         if (get(battle, ref)?.status === "ACTIVE") {
@@ -394,12 +393,12 @@ function reconcileGroupActivity(battle: BattleState, unitId: Id, groupId: string
     return battle;
 }
 
-function wouldCycle(battle: BattleState, ref: Ref<StoredEffect>, lifetime: Lifetime): boolean {
+function wouldCycle(battle: BattleState, ref: Ref<View>, lifetime: Lifetime): boolean {
     if (lifetime.type !== "EFFECT") {
         return false;
     }
 
-    const pending: Ref<StoredEffect>[] = [lifetime.ref];
+    const pending: Ref<View>[] = [lifetime.ref];
     const seen = new Set<string>();
 
     while (pending.length > 0) {

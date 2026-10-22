@@ -81,7 +81,7 @@ function battleOf(snapshot) {
 function effect(snapshot, unitId, ref) {
     return snapshot.units
         .find((unit) => unit.id === unitId)
-        .effects.values().find((instance) => instance.definition.id === ref.id);
+        .effects.values().toArray().find((instance) => instance.definition.id === ref.id);
 }
 
 function scenario({ failure = null, cancelled = false } = {}) {
@@ -135,7 +135,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
         },
     });
     const marker = registerBuff("receiver-mark", 3);
-    const marked = (unit) => unit.effects.values().some(
+    const marked = (unit) => unit.effects.values().toArray().some(
         (instance) => instance.definition === marker && instance.status === "ACTIVE",
     );
     const scoped = registerBuff("execution-power", 2);
@@ -153,7 +153,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                     stage: "receiving",
                     priority: 0,
                     accepts: (battle, invocation) =>
-                        getUnit(battle, ref.host.id)?.effects.values().find(
+                        getUnit(battle, ref.host.id)?.effects.values().toArray().find(
                             (instance) => instance.id === ref.id,
                         )?.status === "ACTIVE",
                     invoke(state, invocation, pending) {
@@ -298,7 +298,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 "EXPLICIT",
                             );
             if (fault.enabled && failure === "late-projectile") {
-                const auraState = getUnit(state, 0).effects.values().find(
+                const auraState = getUnit(state, 0).effects.values().toArray().find(
                     (instance) => instance.definition === aura,
                 ).data;
                 assert.deepEqual(
@@ -338,10 +338,10 @@ function scenario({ failure = null, cancelled = false } = {}) {
     const siblingAction = initializeActionState(fixtureBattle(0), sibling.action).value;
     const delayedSiblingAction = {
         ...siblingAction,
-        states: new Map(siblingAction.states).set("launch", {
-            ...siblingAction.states.get("launch"),
+        states: siblingAction.states.read("launch", current => siblingAction.states.replace(current.definition, {
+            ...current,
             cooldown: { periodTicks: 100, readyAtTick: 1 },
-        }),
+        })),
     };
     const scheduled = {
         ...createEnemyDefinition({
@@ -522,7 +522,7 @@ test("runtime composition: a successful battle preserves identities, snapshots a
     assert.equal(after.spawning.spawnedCount, 1);
     assert.deepEqual(after.spawning.managedFinalUnitIds, [3]);
     assert.equal(after.units.find(unit => unit.id === 2).action.instances.nextId, 1);
-    assert.equal(after.units.find(unit => unit.id === 0).action.instances.values()[0].state.emitted, 2);
+    assert.equal(after.units.find(unit => unit.id === 0).action.instances.values().toArray()[0].state.emitted, 2);
     assert.equal(after.projectiles.nextProjectileId, 3);
     assert.deepEqual(
         after.projectiles.instances.map((projectile) => projectile.id),

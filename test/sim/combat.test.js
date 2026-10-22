@@ -71,7 +71,8 @@ function coreCombatRoute(startPosition = [1, 8], overrides = {}) {
 function unitFacts(unit) {
   return unit.action === undefined ? unit : {
     ...unit,
-    action: { ...unit.action, states: new Map([...unit.action.states].map(([id, state]) => {
+    action: { ...unit.action, states: new Map(unit.action.states.values().map(state => {
+      const id = state.definition.id;
       const { initialize, start, step, onEnd, ...definition } = state.definition;
       if (definition.attack !== undefined) {
         definition.attack = { ...definition.attack, targetGroups: definition.attack.targetGroups.map(group => {
@@ -132,7 +133,7 @@ test('core combat: the real m01 demonstration targets at range, blocks three dog
   assert.ok(tile.buildableType === 'MELEE' || tile.buildableType === 'ALL');
   assert.deepEqual(placement.position, [6, 5]);
   assert.equal(placement.definition.vitality.maxHp, operator.stats.maxHp);
-  assert.equal(placement.definition.action.definitions.values()[0].attack.targetGroups[0].operations[0].power, operator.stats.atk);
+  assert.equal(placement.definition.action.definitions.values().toArray()[0].attack.targetGroups[0].operations[0].power, operator.stats.atk);
   const rangedPlacement = spec.initialUnits[1];
   const rangedTile = BattlefieldMap.get(spec.map, World.toTile(rangedPlacement.position));
   assert.ok(rangedTile.buildableType === 'RANGED' || rangedTile.buildableType === 'ALL');
@@ -423,7 +424,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
   const repeated = battle.snapshot();
   const operator = snapshot.units.find(unit => unit.id === 0);
   const sharedOperator = repeated.units.find(unit => unit.id === 0);
-  const actionId = operator.definition.action.definitions.values()[0].id;
+  const actionId = operator.definition.action.definitions.values().toArray()[0].id;
   const readyAtTick = operator.action.states.get(actionId).cooldown.readyAtTick;
   const hp = operator.vitality.hp;
   for (const key of ['action', 'allegiance', 'layer', 'hitbox', 'effects', 'blocker', 'vitality']) {
@@ -440,7 +441,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
   const previous = battlefieldView({ battlefield });
   const changed = {
     ...operator,
-    action: { ...operator.action, states: new Map(operator.action.states).set(actionId, { ...operator.action.states.get(actionId), cooldown: { ...operator.action.states.get(actionId).cooldown, readyAtTick: 999999 } }) },
+    action: { ...operator.action, states: operator.action.states.read(actionId, current => operator.action.states.replace(current.definition, { ...current, cooldown: { ...current.cooldown, readyAtTick: 999999 } })) },
     allegiance: { ...operator.allegiance, side: 'ENEMY' },
     layer: { ...operator.layer, type: 'AIR' },
     targetable: setRestriction(operator.targetable,
@@ -455,7 +456,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
   assert.deepEqual(draft.blockingRelations, []);
   assert.equal(draft.getUnit(0).action.states.get(actionId).cooldown.readyAtTick, 999999);
   const targetingRequest = { source: unitRef(snapshot.units.find(unit => unit.id === 1)),
-    ...operator.definition.action.definitions.values()[0].attack.targetGroups[0].targeting };
+    ...operator.definition.action.definitions.values().toArray()[0].attack.targetGroups[0].targeting };
   assert.equal(allowsRestrictions({ battlefield }, targetingRequest, draft.getUnit(0)), false);
   assert.equal(draft.getUnit(0), changed);
 
@@ -495,12 +496,12 @@ test('core combat: the limited legacy adapter rejects unsupported content and pr
     enemies: [{ definition: walker({ bat: 2, aspd: 100, speed: 1 }), route: coreCombatRoute() }],
   };
   const battle = createLegacyCombatBattle(options);
-  assert.equal(battle.snapshot().units[0].definition.action.definitions.values()[0].intervalTicks, 15);
+  assert.equal(battle.snapshot().units[0].definition.action.definitions.values().toArray()[0].intervalTicks, 15);
   battle.step();
   const enemy = battle.snapshot().units.find(unit => unit.id === 1);
 
-  assert.equal(enemy.definition.action.definitions.values()[0].intervalTicks, 60);
-  assert.equal(battle.snapshot().units[0].definition.action.definitions.values()[0].speed, 200);
+  assert.equal(enemy.definition.action.definitions.values().toArray()[0].intervalTicks, 60);
+  assert.equal(battle.snapshot().units[0].definition.action.definitions.values().toArray()[0].speed, 200);
   assert.equal(enemy.definition.locomotion.speed, 1 / 60);
   assert.throws(() => createLegacyCombatBattle({ ...options, operators: [{ definition: guard({ skill: { spCost: 1 } }), position: [1, 5] }] }), /does not execute operator skills/);
   assert.throws(() => createLegacyCombatBattle({ ...options, operators: [{ definition: guard({ dmgType: 'heal' }), position: [1, 5] }] }), /only supports physical, arts and true damage/);
@@ -1174,9 +1175,9 @@ test('core protection effects: withdrawing one source retains the other source a
     assert.equal(restricted(effect, state), true, effect.id);
     state = effects.end(state, first.value);
     assert.equal(restricted(effect, state), false, effect.id);
-    assert.equal(both.effects.values().length, 2);
+    assert.equal(both.effects.values().toArray().length, 2);
     assert.equal(restricted(effect, second.state), true, effect.id);
-    assert.equal(target.effects.values().length, 0);
+    assert.equal(target.effects.values().toArray().length, 0);
   }
 });
 
@@ -1196,7 +1197,7 @@ test('core vitality: invincibility rejects receiving before HIT SP and removing 
   const state = enterSkill(createBattleState(fixtureBattlefieldState([target])), unitRef(target));
   const request = { source: null, target: unitRef(target), parameters: parameters(10, 'TRUE') };
   const blocked = dealDamage(state, request);
-  const protection = getUnit(state, 1).effects.values().find(effect => effect.definition === invincible);
+  const protection = getUnit(state, 1).effects.values().toArray().find(effect => effect.definition === invincible);
   const unprotected = effects.end(state, { host: unitRef(target), id: protection.id });
   const allowed = dealDamage(unprotected, request);
 
@@ -1220,7 +1221,7 @@ test('core vitality: nested direct healing ignores target selection restrictions
       invoke(state, context, pending) {
         if (installedInitially) {
           state = effects.end(state, { host: context.request.target,
-            id: getUnit(state, context.request.target.id).effects.values()[0].id });
+            id: getUnit(state, context.request.target.id).effects.values().toArray()[0].id });
         } else {
           state = effects.install(state, context.request.target, healFree).state;
         }
@@ -1345,7 +1346,7 @@ test('core action: healing target selection owns the heal-free exception', () =>
     const source = actionUnit(0, 'ALLY', [0, 0], { action });
     const target = actionUnit(1, 'ALLY', [1, 0], { hp: 40, effects: [healFree] });
     const before = JSON.stringify([source, target]);
-    const result = startSingleAction(source, source.definition.action.definitions.values()[0], {
+    const result = startSingleAction(source, source.definition.action.definitions.values().toArray()[0], {
       battlefield: actionView([source, target]), tick: 0,
     });
     const heals = result.events.filter(event => event.type === 'HEAL');
@@ -1361,7 +1362,7 @@ test('core action: explicitly declared query purposes gate mixed outputs while s
   const mixed = actionUnit(0, 'ALLY', [0, 0], { action: attackDefinition([
     { id: 'attack', targeting: damageTargeting({ purposes: ['DAMAGE', 'HEAL'] }), operations: [damageEffect(10), healEffect(5)] },
   ]) });
-  const result = startSingleAction(mixed, mixed.definition.action.definitions.values()[0], {
+  const result = startSingleAction(mixed, mixed.definition.action.definitions.values().toArray()[0], {
     battlefield: actionView([mixed, target]), tick: 0,
   });
   assert.deepEqual(result.events, []);
@@ -1369,7 +1370,7 @@ test('core action: explicitly declared query purposes gate mixed outputs while s
   const damageOnly = actionUnit(0, 'ALLY', [0, 0], { action: attackDefinition([
     { id: 'attack', targeting: damageTargeting(), operations: [damageEffect(10), healEffect(5)] },
   ]) });
-  const permitted = startSingleAction(damageOnly, damageOnly.definition.action.definitions.values()[0], {
+  const permitted = startSingleAction(damageOnly, damageOnly.definition.action.definitions.values().toArray()[0], {
     battlefield: actionView([damageOnly, target]), tick: 0,
   });
   assert.equal(permitted.events.find(event => event.type === 'DAMAGE').hp, 70);
@@ -1378,7 +1379,7 @@ test('core action: explicitly declared query purposes gate mixed outputs while s
   const source = actionUnit(0, 'ALLY', [0, 0], { hp: 60, effects: [healFree], action: attackDefinition([
     { id: 'attack', targeting: damageTargeting(), operations: [damageEffect(10)] },
   ], [{ receiver: { type: 'SOURCE' }, operation: healEffect(15) }]) });
-  const stepped = startSingleAction(source, source.definition.action.definitions.values()[0], {
+  const stepped = startSingleAction(source, source.definition.action.definitions.values().toArray()[0], {
     battlefield: actionView([source, target]), tick: 0,
   });
   assert.deepEqual(stepped.events.map(event => event.type), ['ACTION', 'ACTION_RELEASED', 'DAMAGE', 'HEAL', 'ACTION_FINISHED']);
@@ -1395,7 +1396,7 @@ test('core action: secondary target groups cannot trigger the action and use ind
   ]);
   const source = actionUnit(0, 'ALLY', [0, 0], { action: definition });
   const friend = actionUnit(2, 'ALLY', [2, 0], { hp: 40 });
-  const compiled = source.definition.action.definitions.values()[0];
+  const compiled = source.definition.action.definitions.values().toArray()[0];
   const noEnemy = startSingleAction(source, compiled, { battlefield: actionView([source, friend]), tick: 0 });
   assert.deepEqual(noEnemy.units.map(unit => unit.id), [source.id, friend.id]);
   assert.deepEqual(noEnemy.removedUnitIds, []);
@@ -1435,7 +1436,7 @@ test('core combat: healing sees earlier phase damage and replays without executa
       .map(event => [event.sourceUnitId, event.targetUnitId, event.amount]), [[2, 1, 10]]);
     const serialized = JSON.parse(JSON.stringify(snapshot));
     assert.deepEqual(serialized.units.map(unit => unit.effects), snapshot.units.map(unit => ({
-      instances: unit.effects.values(), nextId: unit.effects.nextId,
+      instances: unit.effects.values().toArray(), nextId: unit.effects.nextId,
     })));
     return { step, snapshot: serialized };
   };
@@ -1448,7 +1449,7 @@ test('core action: binding follow-ups retain the selected target and read preced
   ], [{ receiver: { type: 'BINDING', bindingId: 'restore' }, operation: healEffect(5) }]) });
   const first = actionUnit(1, 'ALLY', [1, 0], { hp: 30 });
   const second = actionUnit(2, 'ALLY', [2, 0], { hp: 40 });
-  const result = startSingleAction(source, source.definition.action.definitions.values()[0], {
+  const result = startSingleAction(source, source.definition.action.definitions.values().toArray()[0], {
     battlefield: actionView([source, first, second]), tick: 0,
   });
 

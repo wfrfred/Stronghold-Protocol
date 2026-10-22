@@ -2,15 +2,12 @@ import type { Ref } from "../../../../common/ref.js";
 import { closeLifetime } from "../../../battle/execution/lifetime.js";
 import { appendEvents, updateUnit, type State as BattleState } from "../../../battle/state.js";
 import * as units from "../../query.js";
-import { ref } from "../action.js";
-import type { Actions } from "../actions.js";
+import { ref, type View } from "../action.js";
 import type { End } from "../definition.js";
-
-type StoredAction = ReturnType<Actions["values"]>[number];
 
 export function end(
     battle: BattleState,
-    reference: Ref<StoredAction>,
+    reference: Ref<View>,
     result: End,
     lifetimeReason = result.type === "FINISHED" ? "ACTION_FINISHED" : result.reason,
 ): BattleState {
@@ -24,7 +21,10 @@ export function end(
             const host = units.get(battle, self.host)!;
             battle = updateUnit(battle, {
                 ...host,
-                action: { ...host.action, instances: host.action.instances.replace(ending) },
+                action: {
+                    ...host.action,
+                    instances: host.action.instances.replace(ref(self), ending),
+                },
             });
             battle = closeLifetime(battle, { type: "ACTION", ref: ref(ending) }, lifetimeReason);
 

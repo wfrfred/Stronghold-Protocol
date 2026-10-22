@@ -8,10 +8,7 @@ import type { WorldPosition } from "../../geometry/coordinate.js";
 import type { Range } from "../../geometry/range.js";
 import type { Id } from "../../unit/unit.js";
 import type { Definition } from "./definition.js";
-import type { Projectile } from "./projectile.js";
-import type { Projectiles } from "./projectiles.js";
-
-type StoredProjectile = ReturnType<Projectiles["values"]>[number];
+import type { Projectile, View } from "./projectile.js";
 
 export interface ProjectileLaunchInput<S extends object = object> {
     readonly source: Id | null;
@@ -26,19 +23,19 @@ export interface ProjectileLaunchInput<S extends object = object> {
     readonly initialState?: S;
 }
 
-export function ref<P extends StoredProjectile>(projectile: P): Ref<P> {
+export function ref<P extends View>(projectile: P): Ref<P> {
     return { id: projectile.id } as Ref<P>;
 }
 
-export function all(state: BattleState): Ref<StoredProjectile>[] {
-    return state.battlefield.projectiles.values().map(ref);
+export function all(state: BattleState): Ref<View>[] {
+    return [...state.battlefield.projectiles.values().map(ref)];
 }
 
-export function getProjectile<P extends StoredProjectile>(
+export function getProjectile<P extends View>(
     state: BattleState,
     reference: Ref<P>,
 ): P | undefined {
-    return state.battlefield.projectiles.get(reference.id) as P | undefined;
+    return state.battlefield.projectiles.get(reference);
 }
 
 export function replaceProjectile<S extends object>(
@@ -51,15 +48,12 @@ export function replaceProjectile<S extends object>(
         return state;
     }
 
-    const projectiles = state.battlefield.projectiles.replace(projectile);
+    const projectiles = state.battlefield.projectiles.replace(ref(projectile), projectile);
 
     return { ...state, battlefield: { ...state.battlefield, projectiles } };
 }
 
-export function resolveProjectileAttackPower(
-    state: BattleState,
-    projectile: StoredProjectile,
-): number {
+export function resolveProjectileAttackPower(state: BattleState, projectile: View): number {
     const source = projectile.source === null ? undefined : getUnit(state, projectile.source);
 
     if (source === undefined) {

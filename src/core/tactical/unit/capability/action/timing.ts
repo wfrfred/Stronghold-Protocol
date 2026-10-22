@@ -5,15 +5,15 @@ import type { Unit } from "../../unit.js";
 import * as units from "../../query.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as attribute from "../../contribution/attribute.js";
-import type { Definition } from "../../action/definition.js";
+import type { View } from "../../action/definition.js";
 import type { Action } from "./capability.js";
 
-type StoredDefinition = Pick<Definition, "intervalTicks" | "speed">;
+type Timing = Pick<View, "intervalTicks" | "speed">;
 
 export function resolveSpeed(
     battle: BattleState,
     source: Ref<Unit & Action>,
-    definition: StoredDefinition,
+    definition: Timing,
 ): number | undefined {
     const unit = units.get(battle, source);
 
@@ -37,7 +37,7 @@ export function resolveSpeed(
 export function resolveBaseInterval(
     battle: BattleState,
     source: Ref<Unit & Action>,
-    definition: StoredDefinition,
+    definition: Timing,
 ): number | undefined {
     const unit = units.get(battle, source);
 
@@ -61,7 +61,7 @@ export function resolveBaseInterval(
 export function resolveInterval(
     battle: BattleState,
     source: Ref<Unit & Action>,
-    definition: StoredDefinition,
+    definition: Timing,
 ): number | undefined {
     const interval = resolveBaseInterval(battle, source, definition);
     const speed = resolveSpeed(battle, source, definition);

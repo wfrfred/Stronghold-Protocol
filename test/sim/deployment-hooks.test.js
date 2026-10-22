@@ -224,7 +224,7 @@ test("an Effect can own a deployment observer and remove it during source retire
     assert.deepEqual(calls, [1]);
     assert.equal(runtime.snapshot().units.find((unit) => unit.id === 0), undefined);
     assert.equal(initial.units[0].deployable.deployedHooks.length, 1);
-    assert.equal(initial.units[0].effects.values()[0].status, "ACTIVE");
+    assert.equal(initial.units[0].effects.values().toArray()[0].status, "ACTIVE");
 });
 
 test("failed ticks throw and do not publish deployment hook changes", () => {

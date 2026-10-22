@@ -68,7 +68,7 @@ test("effect deadlines: invalid initial time is rejected before initialization o
         );
     }
     assert.deepEqual(trace, []);
-    assert.equal(getUnit(state, 0).effects.values().length, 0);
+    assert.equal(getUnit(state, 0).effects.values().toArray().length, 0);
     const installed = install(state, definition("initial"));
     const self = get(installed.state, installed.value);
     const invalid = replaceEffect(installed.state, installed.value, {

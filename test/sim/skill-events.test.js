@@ -24,7 +24,7 @@ test("zero-duration activation completes lifecycle callbacks and records each li
         },
         onEnd(battle, self) {
             assert.equal(getUnit(battle, 1).skill.active.status, "ENDING");
-            assert.equal(getUnit(battle, 1).effects.values().length, 0);
+            assert.equal(getUnit(battle, 1).effects.values().toArray().length, 0);
             trace.push("end");
             return battle;
         },

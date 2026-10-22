@@ -57,7 +57,7 @@ function fixture() {
                         id: "consume",
                         stage: "receiving",
                         priority: 0,
-                        accepts: (battle, context) => getUnit(battle, context.request.target.id)?.effects.values().find(effect => effect.id === ref.id)?.status === "ACTIVE",
+                        accepts: (battle, context) => getUnit(battle, context.request.target.id)?.effects.values().toArray().find(effect => effect.id === ref.id)?.status === "ACTIVE",
                         invoke(state, context, value) {
                             const current = get(state, ref);
                             state = effects.replaceEffect(state, ref, setData(current, { consumed: current.data.consumed + 1 }));
@@ -124,8 +124,8 @@ for (const domain of ["deployment", "predefined"]) {
             );
         }
 
-        assert.equal(getUnit(state, 2).effects.values()[0].data.consumed, 2);
-        assert.equal(before.getUnit(2).effects.values()[0].data.consumed, 0);
+        assert.equal(getUnit(state, 2).effects.values().toArray()[0].data.consumed, 2);
+        assert.equal(before.getUnit(2).effects.values().toArray()[0].data.consumed, 0);
         assert.deepEqual(
             state.removedUnits.map((unit) => unit.unitId),
             [0, 1],
@@ -290,7 +290,7 @@ test("effect terminal callback can retire its host and settle remote Action and 
     const installed = effects.install(battle, unitRef(getUnit(battle, 0)), content);
     battle = effects.end(installed.state, installed.value);
     assert.equal(getUnit(battle, 0), undefined);
-    assert.deepEqual(getUnit(battle, 1).effects.values(), []);
+    assert.deepEqual(getUnit(battle, 1).effects.values().toArray(), []);
     assert.ok(trace.indexOf("action-effect") < trace.indexOf("after-damage"));
     assert.ok(trace.indexOf("skill-effect") < trace.indexOf("after-damage"));
     assert.ok(trace.indexOf("skill") < trace.indexOf("after-damage"));

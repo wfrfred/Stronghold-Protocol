@@ -1,18 +1,16 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
+import { Store } from "../../../common/collection/store.js";
+import type { Query } from "../../../common/query.js";
+import type { Ref } from "../../../common/ref.js";
 import type { Definition } from "./definition.js";
-import type { Projectile, ProjectileId } from "./projectile.js";
-
-type StoredProjectile = Omit<Projectile, "definition" | "state"> & {
-    readonly definition: Pick<Definition<object>, "id">;
-    readonly state: object;
-};
+import type { Projectile, ProjectileId, Snapshot, View } from "./projectile.js";
 
 export class Projectiles {
-    static readonly #empty = new Projectiles(new Map());
+    static readonly #empty = new Projectiles(Store.empty<ProjectileId, View>());
 
-    readonly #entries: ReadonlyMap<ProjectileId, StoredProjectile>;
+    readonly #entries: Store<ProjectileId, View>;
 
-    private constructor(entries: ReadonlyMap<ProjectileId, StoredProjectile>) {
+    private constructor(entries: Store<ProjectileId, View>) {
         this.#entries = entries;
     }
 
@@ -24,14 +22,19 @@ export class Projectiles {
         return this.#entries.size;
     }
 
-    get(id: ProjectileId): StoredProjectile | undefined;
+    get<P extends View>(reference: Ref<P>): P | undefined;
+    get(id: ProjectileId): View | undefined;
     get<S extends object>(id: ProjectileId, definition: Definition<S>): Projectile<S> | undefined;
-    get<S extends object>(
-        id: ProjectileId,
+    get<S extends object, P extends View>(
+        identity: ProjectileId | Ref<P>,
         definition?: Definition<S>,
-    ): StoredProjectile | Projectile<S> | undefined {
+    ): View | Projectile<S> | P | undefined {
+        const id = typeof identity === "number" ? identity : identity.id;
         const projectile = this.#entries.get(id);
 
+        if (typeof identity !== "number") {
+            return projectile;
+        }
         if (definition === undefined) {
             return projectile;
         }
@@ -51,29 +54,42 @@ export class Projectiles {
         return projectile === undefined ? undefined : reader(projectile as Projectile);
     }
 
-    values(): readonly StoredProjectile[] {
-        return [...this.#entries.values()];
+    values(): Query<View> {
+        return this.#entries.values();
     }
 
-    keys(): readonly ProjectileId[] {
-        return [...this.#entries.keys()];
+    keys(): Query<ProjectileId> {
+        return this.#entries.keys();
+    }
+
+    snapshot(): readonly Snapshot[] {
+        return this.#entries
+            .values()
+            .map((projectile) => projectile as Snapshot)
+            .toArray();
     }
 
     add<S extends object>(projectile: Projectile<S>): Projectiles {
         assertNonnegativeSafeInteger(projectile.id, "projectile id");
 
-        if (this.#entries.has(projectile.id)) {
+        if (this.#entries.get(projectile.id) !== undefined) {
             throw new RangeError(`duplicate projectile: ${projectile.id}`);
         }
 
-        return new Projectiles(new Map([...this.#entries, [projectile.id, projectile]]));
+        return new Projectiles(this.#entries.add(projectile.id, projectile));
     }
 
-    replace<S extends object>(projectile: Projectile<S>): Projectiles {
-        const previous = this.#entries.get(projectile.id);
+    replace<S extends object>(
+        reference: Ref<Projectile<S>>,
+        projectile: NoInfer<Projectile<S>>,
+    ): Projectiles {
+        const previous = this.get(reference);
 
         if (previous === undefined) {
-            throw new RangeError(`unknown projectile: ${projectile.id}`);
+            throw new RangeError(`unknown projectile: ${reference.id}`);
+        }
+        if (projectile.id !== reference.id) {
+            throw new TypeError("projectile identity cannot change");
         }
         if (previous.definition !== projectile.definition) {
             throw new RangeError("projectile definition cannot change during update");
@@ -82,17 +98,14 @@ export class Projectiles {
             return this;
         }
 
-        return new Projectiles(new Map([...this.#entries, [projectile.id, projectile]]));
+        return new Projectiles(this.#entries.replace(reference.id, projectile));
     }
 
     remove(id: ProjectileId): Projectiles {
-        if (!this.#entries.has(id)) {
+        if (this.#entries.get(id) === undefined) {
             throw new RangeError(`unknown projectile: ${id}`);
         }
 
-        const entries = new Map(this.#entries);
-        entries.delete(id);
-
-        return new Projectiles(entries);
+        return new Projectiles(this.#entries.remove(id));
     }
 }

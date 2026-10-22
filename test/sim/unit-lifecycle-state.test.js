@@ -88,12 +88,12 @@ for (const reason of ["DEATH", "RETREAT", "SCRIPT"]) {
     assert.equal(effectEnds.length, 2);
     assert.deepEqual(new Map(effectEnds), new Map([["skill-dependent", reason], ["host-dependent", reason]]));
     assert.equal(getUnit(state, 0), undefined);
-    assert.deepEqual(getUnit(state, 1).effects.values(), []);
+    assert.deepEqual(getUnit(state, 1).effects.values().toArray(), []);
     assert.equal(actions.get(state, started.value.ref), undefined);
     assert.equal(leave(state, 0, reason), state);
     assert.equal(finish(state, activated.value.ref), state);
     assert.equal(getUnit(before, 0).skill.active.status, "ACTIVE");
-    assert.equal(getUnit(before, 1).effects.values().length, 1);
+    assert.equal(getUnit(before, 1).effects.values().toArray().length, 1);
   });
 }
 
@@ -128,7 +128,7 @@ test("departure callbacks observe LEAVING while old snapshots remain PRESENT", (
   assert.deepEqual(new Map(trace), new Map([["disable effect", "LEAVING"], ["end effect", "LEAVING"], ["finish skill", "LEAVING"]]));
   assert.ok(trace.findIndex(([stage]) => stage === "disable effect") < trace.findIndex(([stage]) => stage === "end effect"));
   assert.equal(before.getUnit(0).lifecycle, "PRESENT");
-  assert.equal(before.getUnit(0).effects.values()[0].status, "ACTIVE");
+  assert.equal(before.getUnit(0).effects.values().toArray()[0].status, "ACTIVE");
   assert.equal(getUnit(original, 0).lifecycle, "PRESENT");
   assert.equal(getUnit(state, 0), undefined);
   assert.deepEqual(state.removedUnits.map(({ unitId, reason }) => [unitId, reason]), [[0, "RETREAT"]]);
@@ -229,7 +229,7 @@ test("onLeave reads the pre-cleanup Unit after removal and passes its changes to
       assert.equal(departure.unit.lifecycle, "PRESENT");
       assert.equal(departure.unit.skill.sp.value, 2);
       assert.equal(departure.unit.skill.active.id, 0);
-      assert.equal(departure.unit.effects.values()[0].status, "ACTIVE");
+      assert.equal(departure.unit.effects.values().toArray()[0].status, "ACTIVE");
       const other = getUnit(state, 1);
       state = updateUnit(state, { ...other, vitality: { ...other.vitality, hp: 77 } });
       return enter(registerUnit(state, child), [child.id]);

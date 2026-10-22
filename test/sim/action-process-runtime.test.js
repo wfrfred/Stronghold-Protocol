@@ -83,11 +83,11 @@ test("action runtime: a newly registered instance first executes once and retain
     const runtime = new BattleRuntime(spec([unit(0, { action: definition }), unit(1)]));
     runtime.step();
     const first = runtime.snapshot(),
-        retained = first.units.find(unit => unit.id === 0).action.instances.values()[0];
+        retained = first.units.find(unit => unit.id === 0).action.instances.values().toArray()[0];
     assert.equal(retained.state.count, 1);
     assert.equal(retained.definition, definition);
     runtime.step();
-    assert.equal(runtime.snapshot().units.find(unit => unit.id === 0).action.instances.values()[0].state.count, 2);
+    assert.equal(runtime.snapshot().units.find(unit => unit.id === 0).action.instances.values().toArray()[0].state.count, 2);
     assert.equal(retained.state.count, 1);
 });
 
@@ -107,7 +107,7 @@ test("action runtime: an immediately finished definition starts once in one auto
         1,
     );
     assert.equal(starts, 1);
-    assert.equal(runtime.snapshot().units.find(unit => unit.id === 0).action.instances.values().length, 0);
+    assert.equal(runtime.snapshot().units.find(unit => unit.id === 0).action.instances.values().toArray().length, 0);
     runtime.step();
     assert.equal(starts, 2);
 });
@@ -134,9 +134,9 @@ test("action runtime: cancellation commands complete before a delayed release wi
     runtime.step();
     const first = runtime.snapshot();
     assert.deepEqual(first.units.filter(unit => unit.action !== undefined)
-        .map(unit => unit.action.instances.values()[0].id), [0, 0]);
+        .map(unit => unit.action.instances.values().toArray()[0].id), [0, 0]);
     const cancelled = runtime.step([
-        { type: "CANCEL_ACTION_EXECUTION", ref: actionRef(first.units.find(unit => unit.id === 0).action.instances.values()[0]) },
+        { type: "CANCEL_ACTION_EXECUTION", ref: actionRef(first.units.find(unit => unit.id === 0).action.instances.values().toArray()[0]) },
     ]);
     assert.deepEqual(cancelled.events.filter(event => event.type === "ACTION_CANCELLED")
         .map(event => [event.sourceUnitId, event.executionId]), [[0, 0]]);
@@ -206,8 +206,8 @@ test("action runtime: host order advances old instances before selection and def
     assert.deepEqual(trace, ["old/0", "child/1", "select/0", "old/1", "select/1"]);
     const first = runtime.snapshot().units.find(unit => unit.id === 0);
     const second = runtime.snapshot().units.find(unit => unit.id === 1);
-    assert.deepEqual(first.action.instances.values().map(self => self.id), [0]);
-    assert.deepEqual(second.action.instances.values().map(self => self.id), [0, 1]);
+    assert.deepEqual(first.action.instances.values().toArray().map(self => self.id), [0]);
+    assert.deepEqual(second.action.instances.values().toArray().map(self => self.id), [0, 1]);
 });
 
 test("action runtime: a late exception publishes neither progressed action state nor domain changes", () => {
@@ -228,7 +228,7 @@ test("action runtime: a late exception publishes neither progressed action state
         (error) => error === failure,
     );
     assert.deepEqual(runtime.snapshot(), before);
-    assert.equal(before.units.find(unit => unit.id === 0).action.instances.values()[0].state.count, 0);
+    assert.equal(before.units.find(unit => unit.id === 0).action.instances.values().toArray()[0].state.count, 0);
 });
 
 test("action runtime: dependency cleanup can finish nested host death before a thrown end callback", () => {

@@ -43,7 +43,7 @@ const refresh = (stackCount, expiresAtTick, reloadModifiers) => ({
     expiresAtTick,
     reloadModifiers,
 });
-const instance = (battle) => getUnit(battle, 0).effects.values()[0];
+const instance = (battle) => getUnit(battle, 0).effects.values().toArray()[0];
 const power = (battle) => resolveAttack(battle, unitRef(getUnit(battle, 0)));
 const address = { host: { id: 0 }, id: 0 };
 
