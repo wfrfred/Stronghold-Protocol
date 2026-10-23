@@ -1,10 +1,11 @@
 import { Projectiles } from "../projectile/projectiles.js";
 import type { State as NavigationState } from "../navigation/state.js";
 import type { Unit, Id } from "../../unit/unit.js";
+import type { State as FieldState } from "../state.js";
 import { updateBlockingRelations, type BlockingRelation } from "../blocking/relations.js";
 import { synchronize as synchronizeMovement } from "../blocking/movement.js";
-import type { BattlefieldChangeResult } from "../contract.js";
 import {
+    compareUnits,
     deriveBattlefieldDependencies,
     type BattlefieldDependencyChanges,
 } from "./dependencies.js";
@@ -17,8 +18,8 @@ import {
     type BattlefieldSpatialView,
 } from "./indexes.js";
 import {
-    getLostSupports,
     reconcileSupportRelations,
+    validateSupportRelations,
     type SupportRelation,
 } from "../support/relations.js";
 import { derive, project, type Index } from "./effect-lifetimes.js";
@@ -56,14 +57,11 @@ export function createBattlefieldState<U extends Unit>(
 }
 
 function finishSettlement<U extends Unit>(
-    previous: BattlefieldState<U>,
+    previous: FieldState<U>,
     content: BattlefieldContent<U>,
     spatial: BattlefieldSpatialView,
     effectLifetimes: Index,
-): {
-    readonly state: BattlefieldState<U>;
-    readonly facts: Pick<BattlefieldChangeResult, "lostSupports">;
-} {
+): FieldState<U> {
     const unchanged =
         content.units === previous.units &&
         content.projectiles === previous.projectiles &&
@@ -72,28 +70,25 @@ function finishSettlement<U extends Unit>(
         content.supportRelations === previous.supportRelations &&
         spatial === previous.spatial &&
         effectLifetimes === previous.effectLifetimes;
-    const state: BattlefieldState<U> = unchanged
-        ? previous
-        : { ...content, spatial, navigation: previous.navigation, effectLifetimes };
-    const lostSupports =
-        content.supportRelations === previous.supportRelations
-            ? []
-            : getLostSupports(previous.supportRelations, content.supportRelations, content.units);
 
-    return { state, facts: { lostSupports } };
+    return unchanged ? previous : { ...previous, ...content, spatial, effectLifetimes };
 }
 
-export function settleBattlefieldState<U extends Unit>(
-    map: BattlefieldMap,
-    previous: BattlefieldState<U>,
+export function maintain<U extends Unit>(
+    previous: FieldState<U>,
     content: BattlefieldContent<U>,
-    changes: BattlefieldDependencyChanges,
-) {
+    changes: BattlefieldDependencyChanges = compareUnits(previous.units, content.units),
+): FieldState<U> {
+    const map = previous.map;
     const dependencies = deriveBattlefieldDependencies(map, previous, content, changes);
-    const supportRelations =
-        dependencies.support || content.supportRelations !== previous.supportRelations
-            ? reconcileSupportRelations(content.units, content.supportRelations)
-            : previous.supportRelations;
+
+    if (content.supportRelations !== previous.supportRelations) {
+        validateSupportRelations(content.units, content.supportRelations);
+    }
+
+    const supportRelations = dependencies.support
+        ? reconcileSupportRelations(content.units, content.supportRelations)
+        : content.supportRelations;
     let spatial = previous.spatial;
 
     if (dependencies.unitTiles || dependencies.occupancy) {
@@ -137,11 +132,16 @@ export function settleBattlefieldState<U extends Unit>(
     );
 }
 
-export function settleBattlefieldStateFully<U extends Unit>(
-    map: BattlefieldMap,
-    previous: BattlefieldState<U>,
+export function maintainFully<U extends Unit>(
+    previous: FieldState<U>,
     content: BattlefieldContent<U>,
-) {
+): FieldState<U> {
+    const map = previous.map;
+
+    if (content.supportRelations !== previous.supportRelations) {
+        validateSupportRelations(content.units, content.supportRelations);
+    }
+
     const supportRelations = reconcileSupportRelations(content.units, content.supportRelations);
     const spatial = projectBattlefieldSpatial(map, content.units);
     const blockingRelations = updateBlockingRelations(

@@ -16,10 +16,6 @@ export interface Input<D extends Definition & Partial<Definitions> = Definition>
     readonly alwaysCheckCurrentPoint: boolean;
 }
 
-export interface Initialization<D extends Definition & Partial<Definitions> = Definition> {
-    readonly unit: Unit & Product<D> & Route;
-}
-
 function sampleOffset(input: RouteInput, next: () => number): WorldPosition {
     const center = Tile.center(input.startPosition);
 
@@ -50,8 +46,8 @@ function sampleOffset(input: RouteInput, next: () => number): WorldPosition {
 export function initialize<D extends Definition & Partial<Definitions>>(
     battle: BattleState,
     spawn: Input<D>,
-): Result<Initialization<D>>;
-export function initialize(battle: BattleState, spawn: Input): Result<Initialization> {
+): Result<Unit & Product<D> & Route>;
+export function initialize(battle: BattleState, spawn: Input): Result<Unit & Route> {
     assertNonnegativeSafeInteger(spawn.id, "unit id");
 
     const input = createInput(spawn.route);
@@ -68,6 +64,6 @@ export function initialize(battle: BattleState, spawn: Input): Result<Initializa
 
     return {
         state: initialized.state,
-        value: { unit: initialized.value },
+        value: initialized.value,
     };
 }

@@ -6,7 +6,7 @@ import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js
 import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { fixtureBattlefieldState } from "../helpers/battlefield.js";
-import { transition } from "../../dist/core/tactical/battlefield/state.js";
+import { replaceUnits } from "../../dist/core/tactical/battlefield/state.js";
 // Combat rules: statuses & immunities, cold→freeze, element bursts, blocking, melee vs FLY, stealth, priorities, healers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -450,7 +450,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
     }) },
     vitality: { ...operator.vitality, hp: 0 },
   };
-  battlefield = transition(battlefield, [{ type: 'UPDATE_UNIT', unit: changed }]).state;
+  battlefield = replaceUnits(battlefield, [changed]);
   const draft = battlefieldView({ battlefield });
   assert.equal(draft.getUnit(0), changed);
   assert.deepEqual(draft.blockingRelations, []);

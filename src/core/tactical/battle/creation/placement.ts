@@ -1,4 +1,3 @@
-import type { BattlefieldChange } from "../../battlefield/contract.js";
 import type { WorldPosition } from "../../geometry/coordinate.js";
 import * as initialization from "../../unit/initialize.js";
 import type { Product } from "../../unit/capability/catalog.js";
@@ -18,11 +17,6 @@ export interface UnitPlacementDefinition<D extends Definition = Definition> {
     readonly position: WorldPosition;
     readonly claims?: readonly OccupancyClaim[];
     readonly effects?: Effects;
-}
-
-export interface UnitPlacementInstantiation<U extends Unit = Unit> {
-    readonly unit: U;
-    readonly changes: readonly BattlefieldChange[];
 }
 
 type NormalizedUnitPlacement<P extends UnitPlacementDefinition> = P extends unknown
@@ -61,11 +55,11 @@ function nextIdentity(value: number, name: string): number {
 export function instantiateUnitPlacement<P extends UnitPlacementDefinition>(
     battle: BattleState,
     placement: P,
-): Result<UnitPlacementInstantiation<Unit & Product<P["definition"]>>>;
+): Result<Unit & Product<P["definition"]>>;
 export function instantiateUnitPlacement(
     battle: BattleState,
     placement: UnitPlacementDefinition,
-): Result<UnitPlacementInstantiation> {
+): Result<Unit> {
     const id = battle.execution.nextUnitId;
     const nextUnitId = nextIdentity(id, "unit");
     battle = { ...battle, execution: { ...battle.execution, nextUnitId } };
@@ -89,10 +83,8 @@ export function instantiateUnitPlacement(
         unit = occupied;
     }
 
-    const changes: BattlefieldChange[] = [{ type: "REGISTER_UNIT", unit }];
-
     return {
         state: battle,
-        value: { unit, changes },
+        value: unit,
     };
 }

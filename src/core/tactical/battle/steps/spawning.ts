@@ -1,12 +1,7 @@
 import { initialize as initializeRoutedUnit } from "../creation/routed-unit.js";
 import type { Unit } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
-import {
-    advanceBattlefield,
-    appendEvents,
-    type State as BattleState,
-    type Result,
-} from "../state.js";
+import { registerUnits, appendEvents, type State as BattleState, type Result } from "../state.js";
 import { advanceSpawnSchedule, recordScheduleSpawns } from "../schedule/runtime.js";
 import type { ScheduledEnemySpawn } from "../schedule/definition.js";
 import { enter } from "../execution/unit.js";
@@ -34,7 +29,7 @@ function spawnEnemies(
             alwaysCheckCurrentPoint: spawn.alwaysCheckCurrentPoint,
         });
         state = initialized.state;
-        enemies.push(initialized.value.unit);
+        enemies.push(initialized.value);
     }
 
     return { state, value: enemies };
@@ -64,10 +59,7 @@ export function advanceSpawning(
         state,
         enemies.map((enemy) => ({ type: "ENEMY_SPAWNED", unitId: enemy.id, tick })),
     );
-    state = advanceBattlefield(
-        state,
-        enemies.map((unit) => ({ type: "REGISTER_UNIT", unit })),
-    );
+    state = registerUnits(state, enemies);
     state = enter(
         state,
         enemies.map((unit) => unit.id),

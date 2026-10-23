@@ -1,3 +1,4 @@
+import { getLostSupports } from '../../dist/core/tactical/battlefield/support/relations.js';
 import * as route from '../../dist/core/tactical/unit/capability/route/operations.js';
 import * as locomotion from '../../dist/core/tactical/unit/capability/locomotion/operations.js';
 import * as units from '../../dist/core/tactical/unit/query.js';
@@ -10,11 +11,9 @@ import { readFileSync } from 'node:fs';
 import { createBattlefieldMap, BattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { create as projectStaticNavigationMap } from '../../dist/core/tactical/battlefield/map/navigation.js';
-import { applyBattlefieldChanges } from '../../dist/core/tactical/battlefield/storage/changes.js';
 import {
-  createBattlefieldState, settleBattlefieldState, settleBattlefieldStateFully,
+  createBattlefieldState, maintain, maintainFully,
 } from '../../dist/core/tactical/battlefield/storage/state.js';
-import { finishBattleEvents } from '../../dist/core/tactical/battle/events.js';
 import { createMechanismDefinition, createMechanism } from '../../dist/core/tactical/battlefield/mechanism.js';
 import { Map as NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
 import { apply, create as createOverlay } from '../../dist/core/tactical/battlefield/navigation/overlay.js';
@@ -355,12 +354,12 @@ function projectionFacts(state) {
 
 function battlefieldProjectionHarness(rows = 2, columns = 5,
   map = createBattlefieldMap(rows, columns, Array.from({ length: rows * columns }, () => coreGround()))) {
-  const branches = [settleBattlefieldState, settleBattlefieldStateFully].map(settle => {
+  const branches = [maintain, maintainFully].map(settle => {
     const baseline = Object.freeze({
       WALK: projectStaticNavigationMap(map, 'WALK', 0),
       FLY: projectStaticNavigationMap(map, 'FLY', 0),
     });
-    return { baseline, settle, state: createBattlefieldState(map, createNavigation(baseline)) };
+    return { baseline, settle, state: { map, ...createBattlefieldState(map, createNavigation(baseline)) } };
   });
   const equivalent = () => {
     const [selective, full] = branches.map(branch => branch.state);
@@ -373,33 +372,27 @@ function battlefieldProjectionHarness(rows = 2, columns = 5,
       assert.deepEqual(entries(selective), entries(full));
     }
   };
-  const commit = (changes, tick = 0) => {
-    const results = branches.map((branch, index) => {
+  const commit = transform => {
+    const content = transform(branches[0].state);
+    const results = branches.map(branch => {
       const previous = branch.state;
       const snapshot = structuredClone(projectionFacts(previous));
-      const batch = typeof changes === 'function' ? changes(previous, index) : changes;
-      const applied = applyBattlefieldChanges(previous, batch);
-      const settled = branch.settle(map, previous, applied.content, applied.dependencies);
+      const settled = branch.settle(previous, content);
       assert.deepEqual(projectionFacts(previous), snapshot);
-      branch.state = settled.state;
-      return { ...applied.facts, ...settled.facts };
+      branch.state = settled;
+      return { lostSupports: getLostSupports(previous.supportRelations, settled.supportRelations, settled.units) };
     });
     assert.deepEqual(results[0], results[1]);
-    const events = results.map(result => finishBattleEvents(
-      result.lostSupports.map(relation => ({ type: "SUPPORT_LOST", ...relation, tick })), result.removedUnits, tick,
-    ));
-    assert.deepEqual(events[0], events[1]);
     equivalent();
     return results[0];
   };
-  const reject = (changes, expected) => {
+  const reject = (transform, expected) => {
+    const content = transform(branches[0].state);
     for (const branch of branches) {
       const previous = branch.state;
       const snapshot = structuredClone(projectionFacts(previous));
       assert.throws(() => {
-        const batch = typeof changes === 'function' ? changes(previous) : changes;
-        const applied = applyBattlefieldChanges(previous, batch);
-        branch.settle(map, previous, applied.content, applied.dependencies);
+        branch.settle(previous, content);
       }, expected);
       assert.equal(branch.state, previous);
       assert.deepEqual(projectionFacts(previous), snapshot);
@@ -417,12 +410,12 @@ const projectionUnit = (id, position, definition = {}, states = {}) => initializ
 test('core selective projection retains untouched collections, indexes and route intent on nonspatial updates', () => {
   const h = battlefieldProjectionHarness();
   const routed = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [coreMove(4)] });
-  h.commit([{ type: 'REGISTER_UNIT', unit: routed.enemy }]);
+  h.commit(state => ({ ...state, units: new Map([...state.units, ...[routed.enemy].map(unit => [unit.id, unit])]) }));
   const previous = h.state;
   const progress = previous.units.get(1).route.main;
-  h.commit(state => [{ type: 'UPDATE_UNIT', unit: {
+  h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
     ...state.units.get(1), vitality: { ...state.units.get(1).vitality, hp: 90 },
-  } }]);
+  }].map(unit => [unit.id, unit])]) }));
   assert.notEqual(h.state.units, previous.units);
   assert.equal(h.state.mechanisms, previous.mechanisms);
   assert.equal(h.state.spatial, previous.spatial);
@@ -446,24 +439,24 @@ test('core selective and full projection release ground blocking when a blocker 
     layer: { type: 'GROUND' },
   });
   const relations = [{ blockerUnitId: 10, blockedUnitId: 11 }];
-  h.commit([blocker, enemy].map(unit => ({ type: 'REGISTER_UNIT', unit })));
-  h.commit([{ type: 'SET_BLOCKING_RELATIONS', relations }]);
+  h.commit(state => ({ ...state, units: new Map([...state.units, ...[blocker, enemy].map(unit => [unit.id, unit])]) }));
+  h.commit(state => ({ ...state, blockingRelations: relations }));
   const retained = h.state.blockingRelations;
-  h.commit([{ type: 'UPDATE_UNIT', unit: { ...blocker, position: [2, 0] } }]);
+  h.commit(state => ({ ...state, units: new Map([...state.units, ...[{ ...blocker, position: [2, 0] }].map(unit => [unit.id, unit])]) }));
   assert.equal(h.state.blockingRelations, retained);
 
   for (const position of [[1, 0], [3, 0], [-1, 0]]) {
-    h.commit([{ type: 'UPDATE_UNIT', unit: blocker }, { type: 'SET_BLOCKING_RELATIONS', relations }]);
+    h.commit(state => ({ ...state, units: new Map([...state.units, ...[blocker].map(unit => [unit.id, unit])]), blockingRelations: relations }));
     assert.deepEqual(h.state.blockingRelations, relations);
-    h.commit([{ type: 'UPDATE_UNIT', unit: { ...blocker, position } }]);
+    h.commit(state => ({ ...state, units: new Map([...state.units, ...[{ ...blocker, position }].map(unit => [unit.id, unit])]) }));
     assert.deepEqual(h.state.blockingRelations, []);
-    h.commit([{ type: 'SET_BLOCKING_RELATIONS', relations }]);
+    h.commit(state => ({ ...state, blockingRelations: relations }));
     assert.deepEqual(h.state.blockingRelations, []);
   }
-  h.commit([{ type: 'UPDATE_UNIT', unit: {
+  h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
     ...blocker, position: [1e30, 0], spatialPresence: { present: false },
-  } }]);
-  h.commit([{ type: 'SET_BLOCKING_RELATIONS', relations }]);
+  }].map(unit => [unit.id, unit])]) }));
+  h.commit(state => ({ ...state, blockingRelations: relations }));
   assert.deepEqual(h.state.blockingRelations, []);
 });
 
@@ -479,29 +472,24 @@ test('core selective and full projection preserve relation history and reacquire
     tileBinding: createTileBindingDefinition({ buildableType: 'ALL', heightType: 'HIGHLAND' }),
   }, { spatialPresence: { present: true }, occupancy: { claims: [projectionClaim(1, 'PRESENT', 'SUPPORT')] } });
   const blocking = [{ blockerUnitId: 10, blockedUnitId: 11 }];
-  h.commit([blocker, enemy, platform].map(unit => ({ type: 'REGISTER_UNIT', unit })));
-  h.commit([{ type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);
-  h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(11), position: Object.freeze([4, 1]) } }]);
+  h.commit(state => ({ ...state, units: new Map([...state.units, ...[blocker, enemy, platform].map(unit => [unit.id, unit])]) }));
+  h.commit(state => ({ ...state, blockingRelations: blocking }));
+  h.commit(state => ({ ...state, units: new Map([...state.units, ...[{ ...state.units.get(11), position: Object.freeze([4, 1]) }].map(unit => [unit.id, unit])]) }));
   assert.deepEqual(h.state.blockingRelations, blocking);
-  h.commit([{ type: 'SET_SUPPORT_RELATIONS', relations: [{ supportedUnitId: 10, supportUnitId: 12 }] }]);
+  h.commit(state => ({ ...state, supportRelations: [{ supportedUnitId: 10, supportUnitId: 12 }] }));
   assert.deepEqual(h.state.blockingRelations, []);
-  const reservation = h.commit(state => [{ type: 'UPDATE_UNIT', unit: {
+  const reservation = h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
     ...state.units.get(12), occupancy: { claims: [projectionClaim(1, 'RESERVATION', 'SUPPORT')] },
-  } }]);
+  }].map(unit => [unit.id, unit])]) }));
   assert.deepEqual(reservation.lostSupports, [{ supportedUnitId: 10, supportUnitId: 12 }]);
-  h.commit([{ type: 'UPDATE_UNIT', unit: platform },
-    { type: 'SET_SUPPORT_RELATIONS', relations: [{ supportedUnitId: 10, supportUnitId: 12 }] }]);
-  const lost = h.commit([{ type: 'REMOVE_UNIT', unitId: 12, reason: 'SCRIPT' }], 4);
+  h.commit(state => ({ ...state, units: new Map([...state.units, ...[platform].map(unit => [unit.id, unit])]), supportRelations: [{ supportedUnitId: 10, supportUnitId: 12 }] }));
+  const lost = h.commit(state => ({ ...state, units: new Map([...state.units].filter(([id]) => id !== 12)) }), 4);
   assert.deepEqual(lost.lostSupports, [{ supportedUnitId: 10, supportUnitId: 12 }]);
-  h.commit([{ type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);
-  h.commit(state => [
-    { type: 'UPDATE_UNIT', unit: { ...state.units.get(11), spatialPresence: { present: false } } },
-    { type: 'RELEASE_BLOCKING_RELATIONS', unitId: 11 },
-    { type: 'UPDATE_UNIT', unit: { ...state.units.get(11), spatialPresence: { present: true } } },
-  ]);
+  h.commit(state => ({ ...state, blockingRelations: blocking }));
+  h.commit(state => ({ ...state, blockingRelations: state.blockingRelations.filter(relation => relation.blockerUnitId !== 11 && relation.blockedUnitId !== 11) }));
   assert.deepEqual(h.state.blockingRelations, []);
-  h.commit([{ type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);
-  h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(11), vitality: { ...state.units.get(11).vitality, hp: 0 } } }]);
+  h.commit(state => ({ ...state, blockingRelations: blocking }));
+  h.commit(state => ({ ...state, units: new Map([...state.units, ...[{ ...state.units.get(11), vitality: { ...state.units.get(11).vitality, hp: 0 } }].map(unit => [unit.id, unit])]) }));
   assert.deepEqual(h.state.blockingRelations, []);
   assert.ok(h.state.spatial.unitsByTile.get(9).has(11));
   const unblockableRule = { id: 'unblockable', allows: () => false };
@@ -512,59 +500,55 @@ test('core selective and full projection preserve relation history and reacquire
     unit => ({ ...unit, blockable: blockable.setRule(unit.blockable, unblockableRule) }),
   ];
   for (const mutate of mutations) {
-    h.commit([{ type: 'UPDATE_UNIT', unit: enemy }, { type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);
-    h.commit(state => [{ type: 'UPDATE_UNIT', unit: mutate(state.units.get(11)) }]);
+    h.commit(state => ({ ...state, units: new Map([...state.units, ...[enemy].map(unit => [unit.id, unit])]), blockingRelations: blocking }));
+    h.commit(state => ({ ...state, units: new Map([...state.units, ...[mutate(state.units.get(11))].map(unit => [unit.id, unit])]) }));
     assert.deepEqual(h.state.blockingRelations, []);
   }
   for (const blockerState of [
     { ...blocker.blocker, capacity: contribution.set([], { id: 'capacity-zero', value: [modifier.create({ finalScaler: 0 })] }) },
     setBlockerRule(blocker.blocker, { id: 'cannot-block', allows: () => false }),
   ]) {
-    h.commit([{ type: 'UPDATE_UNIT', unit: enemy }, { type: 'UPDATE_UNIT', unit: blocker },
-      { type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);
-    h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(10), blocker: blockerState } }]);
+    h.commit(state => ({ ...state, units: new Map([...state.units, ...[enemy, blocker].map(unit => [unit.id, unit])]), blockingRelations: blocking }));
+    h.commit(state => ({ ...state, units: new Map([...state.units, ...[{ ...state.units.get(10), blocker: blockerState }].map(unit => [unit.id, unit])]) }));
     assert.deepEqual(h.state.blockingRelations, []);
   }
-  h.commit([{ type: 'UPDATE_UNIT', unit: enemy }, { type: 'UPDATE_UNIT', unit: blocker },
-    { type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);
+  h.commit(state => ({ ...state, units: new Map([...state.units, ...[enemy, blocker].map(unit => [unit.id, unit])]), blockingRelations: blocking }));
   const spatial = h.state.spatial;
-  h.commit([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 11, position: enemy.position }]);
+  h.commit(state => ({ ...state, units: new Map([...state.units].map(([id, unit]) => [id, id === 11 ? { ...unit, position: enemy.position } : unit])), blockingRelations: (state.blockingRelations).filter(relation => relation.blockerUnitId !== 11 && relation.blockedUnitId !== 11) }));
   assert.deepEqual(h.state.blockingRelations, blocking);
   assert.equal(h.state.spatial, spatial);
 });
 
 test('core selective and full projection reject invalid final references and claims atomically', () => {
   const h = battlefieldProjectionHarness();
-  h.commit([{ type: 'REGISTER_UNIT', unit: battlefieldUnit(10, [0, 0]) }]);
+  h.commit(state => ({ ...state, units: new Map([...state.units, ...[battlefieldUnit(10, [0, 0])].map(unit => [unit.id, unit])]) }));
   const reserved = projectionUnit(11, [1, 0], {}, { spatialPresence: { present: false },
     occupancy: { claims: [projectionClaim(1, 'RESERVATION')] } });
-  h.commit([{ type: 'REGISTER_UNIT', unit: reserved }]);
+  h.commit(state => ({ ...state, units: new Map([...state.units, ...[reserved].map(unit => [unit.id, unit])]) }));
   const hiddenSpatial = h.state.spatial;
-  h.commit(state => [{ type: 'UPDATE_UNIT', unit: {
+  h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
     ...state.units.get(11), position: Object.freeze([1e30, 0]),
-  } }]);
+  }].map(unit => [unit.id, unit])]) }));
   assert.deepEqual(h.state.units.get(11).position, [1e30, 0]);
   assert.equal(h.state.spatial, hiddenSpatial);
   assert.deepEqual([...h.state.spatial.occupancyBySlot.get('1:DEPLOYMENT')], [11]);
-  h.commit(state => [{ type: 'UPDATE_UNIT', unit: {
+  h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
     ...state.units.get(11), position: Object.freeze([1, 0]), spatialPresence: { present: true },
-  } }]);
+  }].map(unit => [unit.id, unit])]) }));
   assert.deepEqual([...h.state.spatial.unitsByTile.get(1)], [11]);
-  h.commit(state => [{ type: 'UPDATE_UNIT', unit: {
+  h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
     ...state.units.get(11), position: Object.freeze([1e30, 0]), spatialPresence: { present: false },
-  } }]);
+  }].map(unit => [unit.id, unit])]) }));
   assert.equal(h.state.spatial.unitsByTile.has(1), false);
-  h.reject([{ type: 'REGISTER_UNIT', unit: projectionUnit(12, [2, 0], {}, {
+  h.reject(state => ({ ...state, units: new Map([...state.units, ...[projectionUnit(12, [2, 0], {}, {
     occupancy: { claims: [projectionClaim(1)] },
-  }) }], /occupancy slot is already claimed/);
-  h.reject([{ type: 'REGISTER_UNIT', unit: projectionUnit(12, [2, 0], {}, {
+  })].map(unit => [unit.id, unit])]) }), /occupancy slot is already claimed/);
+  h.reject(state => ({ ...state, units: new Map([...state.units, ...[projectionUnit(12, [2, 0], {}, {
     spatialPresence: { present: false }, occupancy: { claims: [projectionClaim(99, 'RESERVATION')] },
-  }) }], /occupancy claim is outside/);
-  h.reject([{ type: 'REMOVE_UNIT', unitId: 10, reason: 'SCRIPT' },
-    { type: 'SET_SUPPORT_RELATIONS', relations: [{ supportedUnitId: 11, supportUnitId: 10 }] }], /invalid support relation/);
-  h.commit([{ type: 'REGISTER_UNIT', unit: battlefieldUnit(12, [0, 0]) }]);
-  h.commit(state => [{ type: 'REMOVE_UNIT', unitId: 10, reason: 'SCRIPT' },
-    { type: 'REGISTER_UNIT', unit: state.units.get(10) }]);
+  })].map(unit => [unit.id, unit])]) }), /occupancy claim is outside/);
+  h.reject(state => ({ ...state, units: new Map([...state.units].filter(([id]) => id !== 10)), supportRelations: [{ supportedUnitId: 11, supportUnitId: 10 }] }), /invalid support relation/);
+  h.commit(state => ({ ...state, units: new Map([...state.units, ...[battlefieldUnit(12, [0, 0])].map(unit => [unit.id, unit])]) }));
+  h.commit(state => ({ ...state, units: new Map([...new Map([...state.units].filter(([id]) => id !== 10)), ...[state.units.get(10)].map(unit => [unit.id, unit])]) }));
   assert.deepEqual([...h.state.units.keys()], [11, 12, 10]);
   assert.deepEqual([...h.state.spatial.unitsByTile.get(0)], [12, 10]);
 });
@@ -822,8 +806,8 @@ test('Route replays the original teleport and patrol fixtures deterministically'
       id: 1, definition, route: parseRouteDefinition(raw.routes[index]),
       timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true,
     });
-    let battle = registerUnit({ ...initialized.state, battlefield: { ...initialized.state.battlefield, navigation: nav } }, initialized.value.unit);
-    const ref = units.ref(initialized.value.unit);
+    let battle = registerUnit({ ...initialized.state, battlefield: { ...initialized.state.battlefield, navigation: nav } }, initialized.value);
+    const ref = units.ref(initialized.value);
     const trace = [];
     for (let tick = 0; tick < ticks && !route.isCompleted(units.get(battle, ref).route); tick++) {
       battle = route.advance({ ...battle, tick, events: [] }, ref);

@@ -124,7 +124,7 @@ test("Enemy initialization uses one sampled offset for its Route Definition and 
     const result = initializeRoutedUnit(before, {
         id: 3, definition: enemyDefinition, route: raw, timing, alwaysCheckCurrentPoint: true,
     });
-    const enemy = result.value.unit;
+    const enemy = result.value;
 
     assert.equal(result.state.execution.rngState, rng.state());
     assert.equal(before.execution.rngState, seed);
@@ -148,9 +148,9 @@ test("Repeated enemy births share the Enemy Definition without sharing per-birth
         timing: { waveStartedAtTick: 100, fragmentStartedAtTick: 120 }, alwaysCheckCurrentPoint: false,
     });
 
-    assert.equal(first.value.unit.definition.route.checkpoints[0].tick, 22);
-    assert.equal(second.value.unit.definition.route.checkpoints[0].tick, 102);
-    assert.notDeepEqual(first.value.unit.definition.route.offset, second.value.unit.definition.route.offset);
+    assert.equal(first.value.definition.route.checkpoints[0].tick, 22);
+    assert.equal(second.value.definition.route.checkpoints[0].tick, 102);
+    assert.notDeepEqual(first.value.definition.route.offset, second.value.definition.route.offset);
     assert.equal("route" in enemyDefinition, false);
     assert.equal("alwaysCheckCurrentPoint" in raw, false);
 });

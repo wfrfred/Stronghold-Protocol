@@ -1,5 +1,7 @@
 import { evaluateDeployment } from "../../battlefield/deployment/query.js";
 import type { SupportRelation } from "../../battlefield/support/relations.js";
+import { releaseBlockingRelations } from "../../battlefield/blocking/relations.js";
+import { maintain } from "../../battlefield/storage/state.js";
 import { Tile, type TilePosition } from "../../geometry/coordinate.js";
 import { hasDeployable, type Deployable } from "../../unit/capability/deployable/capability.js";
 import { hasDefinition as hasTileBindingDefinition } from "../../unit/capability/tile-binding/capability.js";
@@ -10,7 +12,7 @@ import type { Unit, Id } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
 import { enter, leave } from "../execution/unit.js";
 import {
-    advanceBattlefield,
+    setBattlefield,
     appendEvents,
     battlefieldView,
     getUnit,
@@ -127,9 +129,9 @@ export function deploy(state: BattleState, request: DeployRequest): Result<Deplo
     });
     state = placed.state;
     const unit = {
-        ...placed.value.unit,
+        ...placed.value,
         deployable: {
-            ...placed.value.unit.deployable,
+            ...placed.value.deployable,
             cardId: value.id,
             cost,
             refundLimit:
@@ -144,15 +146,23 @@ export function deploy(state: BattleState, request: DeployRequest): Result<Deplo
         ...state,
         deployment: changeDp(state.deployment, -cost, state.tick),
     };
-    state = advanceBattlefield(state, [
-        ...placed.value.changes.map((change) =>
-            change.type === "REGISTER_UNIT" ? { ...change, unit } : change,
+    const previous = state.battlefield;
+    const units = new Map(previous.units);
+
+    if (units.has(unit.id)) {
+        throw new RangeError(`duplicate unit: ${unit.id}`);
+    }
+
+    units.set(unit.id, unit);
+    const supportRelations = supportsAfterPlacement(state, unit.id, decision.supportUnitId);
+    state = setBattlefield(
+        state,
+        maintain(
+            previous,
+            { ...previous, units, supportRelations },
+            { updatedUnitIds: new Set([unit.id]), unitOrderChanged: true },
         ),
-        {
-            type: "SET_SUPPORT_RELATIONS",
-            relations: supportsAfterPlacement(state, unit.id, decision.supportUnitId),
-        },
-    ]);
+    );
     state = appendEvents(state, [
         {
             type: "UNIT_DEPLOYED",
@@ -217,14 +227,23 @@ export function relocate(
             ],
         },
     };
-    state = advanceBattlefield(state, [
-        { type: "UPDATE_UNIT", unit: moved },
-        { type: "RELEASE_BLOCKING_RELATIONS", unitId: unit.id },
-        {
-            type: "SET_SUPPORT_RELATIONS",
-            relations: supportsAfterPlacement(state, unit.id, decision.supportUnitId),
-        },
-    ]);
+    const previous = state.battlefield;
+    const units = new Map(previous.units);
+    units.set(unit.id, moved);
+    const supportRelations = supportsAfterPlacement(state, unit.id, decision.supportUnitId);
+    state = setBattlefield(
+        state,
+        maintain(
+            previous,
+            {
+                ...previous,
+                units,
+                blockingRelations: releaseBlockingRelations(previous.blockingRelations, unit.id),
+                supportRelations,
+            },
+            { updatedUnitIds: new Set([unit.id]), unitOrderChanged: false },
+        ),
+    );
 
     return appendEvents(state, [
         { type: "UNIT_RELOCATED", unitId: unit.id, position: moved.position, tick: state.tick },

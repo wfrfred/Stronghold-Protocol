@@ -1,8 +1,9 @@
+import { addMechanism, removeMechanism, replaceMechanism } from '../../dist/core/tactical/battlefield/state.js';
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  advanceBattlefield, battlefieldView, createBattleState, getUnit, registerUnit, updateUnit,
+  setBattlefield, battlefieldView, createBattleState, getUnit, registerUnit, updateUnit,
 } from "../../dist/core/tactical/battle/state.js";
 import { enter, leave } from "../../dist/core/tactical/battle/execution/unit.js";
 import { initialize } from "../helpers/unit.js";
@@ -287,11 +288,9 @@ test("mechanism leave responses keep their candidate IDs and reread current regi
       id: "first-observer",
       onUnitLeave(state) {
         trace.push("first");
-        return advanceBattlefield(state, [
-          { type: "REMOVE_MECHANISM", mechanismId: 1, reason: "SCRIPT" },
-          { type: "SET_MECHANISM_ACTIVE", mechanismId: 2, active: true },
-          { type: "REGISTER_MECHANISM", mechanism: later },
-        ]);
+        let battlefield = removeMechanism(state.battlefield, { id: 1 });
+        battlefield = replaceMechanism(battlefield, { ...battlefield.mechanisms.get(2), active: true });
+        return setBattlefield(state, addMechanism(battlefield, later));
       },
     } }),
     createMechanism({ id: 1, active: true, definition: {

@@ -1,4 +1,5 @@
 import { assertNonnegativeSafeInteger } from "../../common/assert.js";
+import type { Identified, Ref } from "../../common/ref.js";
 import type { State as BattleState } from "../battle/state.js";
 import type { Departure } from "../unit/unit.js";
 
@@ -18,10 +19,16 @@ export interface MechanismDefinition {
     ) => BattleState;
 }
 
-export interface Mechanism<D extends MechanismDefinition = MechanismDefinition> {
+export interface Mechanism<D extends MechanismDefinition = MechanismDefinition> extends Identified<{
+    readonly id: MechanismId;
+}> {
     readonly id: MechanismId;
     readonly definition: D;
     readonly active: boolean;
+}
+
+export function ref<M extends Mechanism>(mechanism: M): Ref<M> {
+    return { id: mechanism.id } as Ref<M>;
 }
 
 export function createMechanismDefinition(definition: MechanismDefinition): MechanismDefinition {

@@ -3,7 +3,7 @@ import type { BattlefieldMap } from "../battlefield/map/map.js";
 import type { UnitPlacementDefinition } from "./creation/placement.js";
 import type { MechanismPlacementDefinition } from "./creation/mechanism.js";
 import type { SpawnScheduleDefinition } from "./schedule/definition.js";
-import type { BattlefieldChangeResult } from "../battlefield/contract.js";
+import type { BattlefieldRemovalReason } from "../battlefield/contract.js";
 import type { BlockingRelation } from "../battlefield/blocking/relations.js";
 import type { CombatEvent } from "./execution/event.js";
 import type { Mechanism } from "../battlefield/mechanism.js";
@@ -93,7 +93,13 @@ export type Event =
     | ({
           readonly type: "UNIT_REMOVED";
           readonly tick: number;
-      } & BattlefieldChangeResult["removedUnits"][number]);
+      } & UnitRemoval);
+
+export interface UnitRemoval {
+    readonly unitId: Id;
+    readonly reason: BattlefieldRemovalReason;
+    readonly unit: Unit;
+}
 
 export interface Result {
     readonly reason: "SCHEDULE_COMPLETED" | "TIME_LIMIT";

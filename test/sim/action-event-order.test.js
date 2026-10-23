@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { battle, unit, actionDefinition } from "../helpers/action-fixture.js";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
-import { transition } from "../../dist/core/tactical/battlefield/state.js";
+import { maintain } from "../../dist/core/tactical/battlefield/storage/state.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { start } from "../../dist/core/tactical/unit/action/operations.js";
 
@@ -27,12 +27,7 @@ test("action event order: lethal output settles support loss before action compl
     let state = battle(source, support, recipient);
     state = {
         ...state,
-        battlefield: transition(state.battlefield, [
-            {
-                type: "SET_SUPPORT_RELATIONS",
-                relations: [{ supportedUnitId: 2, supportUnitId: 1 }],
-            },
-        ]).state,
+        battlefield: maintain(state.battlefield, { ...state.battlefield, supportRelations: [{ supportedUnitId: 2, supportUnitId: 1 }] }),
     };
     const result = start(state, unitRef(getUnit(state, 0)), definition);
     const types = result.state.events.map((event) => event.type);

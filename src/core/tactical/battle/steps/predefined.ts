@@ -1,20 +1,20 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
-import type {
-    BattlefieldChange,
-    BattlefieldRemovalReason,
-    BattlefieldView,
-} from "../../battlefield/contract.js";
-import type { MechanismDefinition } from "../../battlefield/mechanism.js";
+import type { BattlefieldRemovalReason, BattlefieldView } from "../../battlefield/contract.js";
+import type { Mechanism, MechanismDefinition } from "../../battlefield/mechanism.js";
+import type { Unit } from "../../unit/unit.js";
 import {
     createUnitPlacementDefinition,
     instantiateUnitPlacement,
     type UnitPlacementDefinition,
 } from "../creation/placement.js";
+import { instantiateMechanismPlacement } from "../creation/mechanism.js";
 import type { Command } from "../contract.js";
 import { enter, leave } from "../execution/unit.js";
 import {
-    advanceBattlefield,
     battlefieldView,
+    registerUnit,
+    removeMechanism,
+    updateMechanism,
     type State as BattleState,
     type Result,
 } from "../state.js";
@@ -52,11 +52,6 @@ export type PredefinedCommand =
           readonly reason: BattlefieldRemovalReason;
       };
 
-interface PredefinedTransition {
-    readonly presence: readonly PredefinedPresence[];
-    readonly changes: readonly BattlefieldChange[];
-}
-
 export function createPredefinedDefinition(definition: PredefinedDefinition): PredefinedDefinition {
     assertNonnegativeSafeInteger(definition.id, "predefined definition id");
 
@@ -85,56 +80,18 @@ export function predefinedIdsForAlias(
         .map((definition) => definition.id);
 }
 
-function nextIdentity(value: number): number {
-    const next = value + 1;
-
-    if (!Number.isSafeInteger(next)) {
-        throw new RangeError("predefined instance identity overflow");
-    }
-
-    return next;
-}
-
-export function changePredefinedInstances(
+export function instantiatePredefinedInstances(
     state: BattleState,
     definitions: readonly PredefinedDefinition[],
-    initialPresence: readonly PredefinedPresence[],
-    commands: readonly PredefinedCommand[],
-): Result<PredefinedTransition> {
-    if (commands.length === 0) {
-        return { state, value: { presence: initialPresence, changes: [] } };
-    }
+): Result<{ readonly units: readonly Unit[]; readonly mechanisms: readonly Mechanism[] }> {
+    const units: Unit[] = [];
+    const mechanisms: Mechanism[] = [];
 
-    const presence = new Map(initialPresence.map((binding) => [binding.definitionId, binding]));
-    const changes: BattlefieldChange[] = [];
-
-    for (const command of commands) {
-        const definition = definitions.find((definition) => definition.id === command.definitionId);
-
-        if (definition === undefined) {
-            throw new RangeError(`unknown predefined definition: ${command.definitionId}`);
-        }
-
-        const binding = presence.get(command.definitionId);
-
-        if (command.type === "REMOVE_PREDEFINED") {
-            if (binding === undefined) {
-                continue;
-            }
-
-            changes.push(
-                binding.source.type === "UNIT"
-                    ? { type: "REMOVE_UNIT", unitId: binding.source.unitId, reason: command.reason }
-                    : {
-                          type: "REMOVE_MECHANISM",
-                          mechanismId: binding.source.mechanismId,
-                          reason: command.reason,
-                      },
-            );
-            presence.delete(command.definitionId);
-            continue;
-        }
-        if (binding !== undefined) {
+    for (const definition of definitions) {
+        if (
+            !definition.initiallyPresent ||
+            state.predefinedPresence.some((binding) => binding.definitionId === definition.id)
+        ) {
             continue;
         }
 
@@ -144,36 +101,25 @@ export function changePredefinedInstances(
         if (creation.type === "UNIT") {
             const initialized = instantiateUnitPlacement(state, creation);
             state = initialized.state;
-            const instantiated = initialized.value;
-
-            source = Object.freeze({ type: "UNIT", unitId: instantiated.unit.id });
-            changes.push(...instantiated.changes);
+            units.push(initialized.value);
+            source = { type: "UNIT", unitId: initialized.value.id };
         } else {
-            let execution = state.execution;
-            source = Object.freeze({ type: "MECHANISM", mechanismId: execution.nextMechanismId });
-            changes.push({
-                type: "REGISTER_MECHANISM",
-                mechanism: {
-                    id: execution.nextMechanismId,
-                    definition: creation.definition,
-                    active: true,
-                },
-            });
-            execution = { ...execution, nextMechanismId: nextIdentity(execution.nextMechanismId) };
-
-            state = { ...state, execution };
+            const initialized = instantiateMechanismPlacement(creation, state.execution);
+            state = { ...state, execution: initialized.execution };
+            mechanisms.push(initialized.mechanism);
+            source = { type: "MECHANISM", mechanismId: initialized.mechanism.id };
         }
 
-        presence.set(command.definitionId, { definitionId: command.definitionId, source });
+        state = {
+            ...state,
+            predefinedPresence: [
+                ...state.predefinedPresence,
+                { definitionId: definition.id, source },
+            ],
+        };
     }
 
-    return {
-        state,
-        value: {
-            presence: changes.length === 0 ? initialPresence : [...presence.values()],
-            changes,
-        },
-    };
+    return { state, value: { units, mechanisms } };
 }
 
 export function reconcilePredefinedPresence(
@@ -197,32 +143,76 @@ export function advancePredefined(
             continue;
         }
 
-        const transition = changePredefinedInstances(
-            state,
-            definitions,
-            reconcilePredefinedPresence(state.predefinedPresence, battlefieldView(state)),
-            [command],
+        const presence = reconcilePredefinedPresence(
+            state.predefinedPresence,
+            battlefieldView(state),
         );
-        state = transition.state;
-        state = {
-            ...state,
-            predefinedPresence: transition.value.presence,
-        };
 
-        for (const change of transition.value.changes) {
-            if (change.type === "REMOVE_UNIT") {
-                state = leave(state, change.unitId, change.reason);
-            } else {
-                state = advanceBattlefield(state, [change]);
-            }
+        if (presence !== state.predefinedPresence) {
+            state = { ...state, predefinedPresence: presence };
         }
 
-        state = enter(
-            state,
-            transition.value.changes.flatMap((change) =>
-                change.type === "REGISTER_UNIT" ? [change.unit.id] : [],
-            ),
+        const definition = definitions.find((definition) => definition.id === command.definitionId);
+
+        if (definition === undefined) {
+            throw new RangeError(`unknown predefined definition: ${command.definitionId}`);
+        }
+
+        const binding = state.predefinedPresence.find(
+            (binding) => binding.definitionId === command.definitionId,
         );
+
+        if (command.type === "REMOVE_PREDEFINED") {
+            if (binding === undefined) {
+                continue;
+            }
+
+            state = {
+                ...state,
+                predefinedPresence: state.predefinedPresence.filter(
+                    (binding) => binding.definitionId !== command.definitionId,
+                ),
+            };
+            state =
+                binding.source.type === "UNIT"
+                    ? leave(state, binding.source.unitId, command.reason)
+                    : removeMechanism(state, binding.source.mechanismId);
+            continue;
+        }
+        if (binding !== undefined) {
+            continue;
+        }
+
+        const creation = definition.creation;
+
+        if (creation.type === "UNIT") {
+            const initialized = instantiateUnitPlacement(state, creation);
+            state = initialized.state;
+            const unit = initialized.value;
+            state = {
+                ...state,
+                predefinedPresence: [
+                    ...state.predefinedPresence,
+                    { definitionId: definition.id, source: { type: "UNIT", unitId: unit.id } },
+                ],
+            };
+            state = registerUnit(state, unit);
+            state = enter(state, [unit.id]);
+        } else {
+            const initialized = instantiateMechanismPlacement(creation, state.execution);
+            state = {
+                ...state,
+                execution: initialized.execution,
+                predefinedPresence: [
+                    ...state.predefinedPresence,
+                    {
+                        definitionId: definition.id,
+                        source: { type: "MECHANISM", mechanismId: initialized.mechanism.id },
+                    },
+                ],
+            };
+            state = updateMechanism(state, initialized.mechanism);
+        }
     }
 
     return {

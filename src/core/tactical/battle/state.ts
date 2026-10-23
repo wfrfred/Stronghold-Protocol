@@ -1,14 +1,12 @@
-import type {
-    BattlefieldChange,
-    BattlefieldChangeResult,
-    BattlefieldRemovalReason,
-    BattlefieldView,
-} from "../battlefield/contract.js";
-import { transition, type State as BattlefieldState } from "../battlefield/state.js";
+import type { BattlefieldRemovalReason, BattlefieldView } from "../battlefield/contract.js";
+import * as battlefield from "../battlefield/state.js";
+import type { State as BattlefieldState } from "../battlefield/state.js";
 import { view } from "../battlefield/view.js";
-import type { MechanismId, Mechanism } from "../battlefield/mechanism.js";
+import { ref as mechanismRef, type MechanismId, type Mechanism } from "../battlefield/mechanism.js";
+import { getLostSupports } from "../battlefield/support/relations.js";
 import type { Unit, Id } from "../unit/unit.js";
-import type { Event, Result as BattleResult } from "./contract.js";
+import { ref } from "../unit/query.js";
+import type { Event, UnitRemoval, Result as BattleResult } from "./contract.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import type { PredefinedPresence } from "./steps/predefined.js";
 import { createSpawnScheduleDefinition } from "./schedule/definition.js";
@@ -37,7 +35,7 @@ export interface State {
     readonly completedRouteCount: number;
     readonly result: BattleResult | null;
     readonly events: readonly Event[];
-    readonly removedUnits: BattlefieldChangeResult["removedUnits"];
+    readonly removedUnits: readonly UnitRemoval[];
     readonly closedLifetimes: ReadonlySet<string>;
 }
 
@@ -70,23 +68,20 @@ export function createBattleState(
     };
 }
 
-export function advanceBattlefield(state: State, changes: readonly BattlefieldChange[]): State {
-    if (changes.length === 0) {
+export function setBattlefield(state: State, next: BattlefieldState): State {
+    if (next === state.battlefield) {
         return state;
     }
 
-    const advanced = transition(state.battlefield, changes);
-    const facts = advanced.facts;
-
-    const next = {
-        ...state,
-        battlefield: advanced.state,
-        removedUnits: [...state.removedUnits, ...facts.removedUnits],
-    };
+    const lostSupports = getLostSupports(
+        state.battlefield.supportRelations,
+        next.supportRelations,
+        next.units,
+    );
 
     return appendEvents(
-        next,
-        facts.lostSupports.map((relation): Event => ({
+        { ...state, battlefield: next },
+        lostSupports.map((relation): Event => ({
             type: "SUPPORT_LOST",
             ...relation,
             tick: state.tick,
@@ -111,12 +106,23 @@ export function updateMechanism(state: State, mechanism: Mechanism): State {
 
     return current === mechanism
         ? state
-        : advanceBattlefield(state, [
-              {
-                  type: current === undefined ? "REGISTER_MECHANISM" : "UPDATE_MECHANISM",
-                  mechanism,
-              },
-          ]);
+        : setBattlefield(
+              state,
+              current === undefined
+                  ? battlefield.addMechanism(state.battlefield, mechanism)
+                  : battlefield.replaceMechanism(state.battlefield, mechanism),
+          );
+}
+
+export function removeMechanism(state: State, id: MechanismId): State {
+    const mechanism = getMechanism(state, id);
+
+    return mechanism === undefined
+        ? state
+        : setBattlefield(
+              state,
+              battlefield.removeMechanism(state.battlefield, mechanismRef(mechanism)),
+          );
 }
 
 /* eslint-disable @typescript-eslint/no-unnecessary-type-parameters -- Accept capability-bearing object literals while returning only State. */
@@ -125,21 +131,25 @@ export function updateUnit<U extends Unit>(state: State, unit: U): State {
 }
 
 export function updateUnits<U extends Unit>(state: State, units: readonly U[]): State {
-    const changes: BattlefieldChange[] = [];
+    const replacements: U[] = [];
 
     for (const unit of new Map(units.map((unit) => [unit.id, unit])).values()) {
         const current = getUnit(state, unit.id);
 
         if (current !== undefined && current !== unit) {
-            changes.push({ type: "UPDATE_UNIT", unit });
+            replacements.push(unit);
         }
     }
 
-    return advanceBattlefield(state, changes);
+    return setBattlefield(state, battlefield.replaceUnits(state.battlefield, replacements));
 }
 
 export function registerUnit<U extends Unit>(state: State, unit: U): State {
-    return advanceBattlefield(state, [{ type: "REGISTER_UNIT", unit }]);
+    return setBattlefield(state, battlefield.addUnit(state.battlefield, unit));
+}
+
+export function registerUnits<U extends Unit>(state: State, units: readonly U[]): State {
+    return setBattlefield(state, battlefield.addUnits(state.battlefield, units));
 }
 /* eslint-enable @typescript-eslint/no-unnecessary-type-parameters */
 
@@ -168,9 +178,15 @@ export function removeUnit(
     id: Id,
     reason: BattlefieldRemovalReason = "DEATH",
 ): State {
-    return getUnit(state, id) === undefined
-        ? state
-        : advanceBattlefield(state, [{ type: "REMOVE_UNIT", unitId: id, reason }]);
+    const unit = getUnit(state, id);
+
+    if (unit === undefined) {
+        return state;
+    }
+
+    const next = setBattlefield(state, battlefield.removeUnit(state.battlefield, ref(unit)));
+
+    return { ...next, removedUnits: [...next.removedUnits, { unitId: id, reason, unit }] };
 }
 
 export function appendEvents(state: State, events: readonly Event[]): State {

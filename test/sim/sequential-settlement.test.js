@@ -2,7 +2,7 @@ import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { battle, unit } from "../helpers/action-fixture.js";
-import { getUnit, advanceBattlefield } from "../../dist/core/tactical/battle/state.js";
+import { getUnit, registerUnit } from "../../dist/core/tactical/battle/state.js";
 import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
@@ -94,7 +94,7 @@ test("sequential predefined commands allocate after all earlier callback results
                 state,
                 { definition: { id: "callback-child" }, position: [1, 0] },
             );
-            return advanceBattlefield(created.state, created.value.changes);
+            return registerUnit(created.state, created.value);
         },
     }).state;
     const before = state;
@@ -131,4 +131,92 @@ test("sequential predefined commands allocate after all earlier callback results
     assert.deepEqual(advanced.predefinedPresence, [{ definitionId: 1, source: { type: "UNIT", unitId: 2 } }]);
     assert.equal(before.execution.nextUnitId, 1);
     assert.equal(getUnit(before, 0).lifecycle, "PRESENT");
+});
+
+test("predefined removal preserves a replacement created by its own leave callback", () => {
+    let calls = 0;
+    const definitions = [{
+        id: 0,
+        alias: null,
+        initiallyPresent: false,
+        creation: {
+            type: "UNIT",
+            position: [0, 0],
+            definition: {
+                id: "reappearing-on-leave",
+                onLeave(state, departure) {
+                    calls++;
+                    assert.equal(getUnit(state, departure.unit.id), undefined);
+                    assert.deepEqual(state.predefinedPresence, []);
+                    return advancePredefined(state, definitions, [
+                        { type: "APPEAR_PREDEFINED", definitionId: 0 },
+                    ]);
+                },
+            },
+        },
+    }];
+    const before = advancePredefined(battle(), definitions, [
+        { type: "APPEAR_PREDEFINED", definitionId: 0 },
+    ]);
+    const state = advancePredefined(before, definitions, [
+        { type: "REMOVE_PREDEFINED", definitionId: 0, reason: "SCRIPT" },
+    ]);
+
+    assert.equal(calls, 1);
+    assert.deepEqual([...state.battlefield.units.keys()], [1]);
+    assert.deepEqual(state.predefinedPresence, [
+        { definitionId: 0, source: { type: "UNIT", unitId: 1 } },
+    ]);
+    assert.equal(state.execution.nextUnitId, 2);
+    assert.equal(getUnit(state, 1).definition, definitions[0].creation.definition);
+    assert.equal(state.removedUnits[0].unitId, 0);
+    assert.deepEqual([...before.battlefield.units.keys()], [0]);
+    assert.equal(before.predefinedPresence[0].source.unitId, 0);
+    assert.equal(before.execution.nextUnitId, 1);
+});
+
+test("predefined appearance retains a nested replacement and its latest binding", () => {
+    const entered = [];
+    let replaced = false;
+    const definitions = [{
+        id: 0,
+        alias: null,
+        initiallyPresent: false,
+        creation: {
+            type: "UNIT",
+            position: [0, 0],
+            definition: {
+                id: "reappearing-on-enter",
+                onEnter(state, id) {
+                    entered.push(id);
+                    assert.deepEqual(state.predefinedPresence, [
+                        { definitionId: 0, source: { type: "UNIT", unitId: id } },
+                    ]);
+                    assert.notEqual(getUnit(state, id), undefined);
+                    if (replaced) return state;
+                    replaced = true;
+                    return advancePredefined(state, definitions, [
+                        { type: "REMOVE_PREDEFINED", definitionId: 0, reason: "SCRIPT" },
+                        { type: "APPEAR_PREDEFINED", definitionId: 0 },
+                    ]);
+                },
+            },
+        },
+    }];
+    const before = battle();
+    const state = advancePredefined(before, definitions, [
+        { type: "APPEAR_PREDEFINED", definitionId: 0 },
+    ]);
+
+    assert.deepEqual(entered, [0, 1]);
+    assert.deepEqual([...state.battlefield.units.keys()], [1]);
+    assert.deepEqual(state.predefinedPresence, [
+        { definitionId: 0, source: { type: "UNIT", unitId: 1 } },
+    ]);
+    assert.equal(state.execution.nextUnitId, 2);
+    assert.equal(getUnit(state, 1).definition, definitions[0].creation.definition);
+    assert.deepEqual(state.removedUnits.map(removed => removed.unitId), [0]);
+    assert.equal(before.battlefield.units.size, 0);
+    assert.deepEqual(before.predefinedPresence, []);
+    assert.equal(before.execution.nextUnitId, 0);
 });

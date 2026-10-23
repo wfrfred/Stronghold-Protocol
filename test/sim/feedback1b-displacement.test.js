@@ -502,8 +502,8 @@ function coreDisplacedEnemy(checkpoints = [{
       timing: createTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }),
     },
   );
-  const unitRef = ref(initialized.value.unit);
-  let battle = registerUnit(initialized.state, initialized.value.unit);
+  const unitRef = ref(initialized.value);
+  let battle = registerUnit(initialized.state, initialized.value);
   battle = {
     ...battle,
     battlefield: {

@@ -48,7 +48,7 @@ const genericComplete: Unit & Vitality & Offense & Skill & Elemental = generic(s
 const spawned = initializeRoutedUnit(battle, {
   id: 5, definition: { id: 'route-only' }, route: routeInput,
   timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true,
-}).value.unit;
+}).value;
 const routeOnly: Unit & Route = spawned;
 const scheduled: EnemySpawnDefinition = {
   definition: { id: 'route-only' }, route: routeInput,

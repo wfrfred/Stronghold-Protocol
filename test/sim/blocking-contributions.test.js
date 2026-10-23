@@ -1,3 +1,4 @@
+import { getLostSupports } from '../../dist/core/tactical/battlefield/support/relations.js';
 import { fixtureBattle } from "../helpers/unit.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
@@ -15,12 +16,11 @@ import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/m
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
 import { create as createMap } from "../../dist/core/tactical/battlefield/map/navigation.js";
 import { create as createNavigation } from "../../dist/core/tactical/battlefield/navigation/state.js";
-import { applyBattlefieldChanges } from "../../dist/core/tactical/battlefield/storage/changes.js";
-import { deriveBattlefieldDependencies } from "../../dist/core/tactical/battlefield/storage/dependencies.js";
+import { compareUnits, deriveBattlefieldDependencies } from "../../dist/core/tactical/battlefield/storage/dependencies.js";
 import {
     createBattlefieldState,
-    settleBattlefieldState,
-    settleBattlefieldStateFully,
+    maintain,
+    maintainFully,
 } from "../../dist/core/tactical/battlefield/storage/state.js";
 import { initialize } from "../helpers/unit.js";
 import { copy } from "../../dist/core/tactical/unit/snapshot.js";
@@ -211,28 +211,24 @@ function battlefield(units) {
         WALK: createMap(map, "WALK"),
         FLY: createMap(map, "FLY"),
     });
-    const branches = [settleBattlefieldState, settleBattlefieldStateFully].map((settle) => ({
+    const branches = [maintain, maintainFully].map((settle) => ({
         settle,
-        state: createBattlefieldState(map, navigation),
+        state: { map, ...createBattlefieldState(map, navigation) },
     }));
-    const commit = (changes) => {
+    const commit = (transform) => {
+        const content = transform(branches[0].state);
         const results = branches.map((branch) => {
             const previous = branch.state;
-            const applied = applyBattlefieldChanges(previous, changes);
+            const changed = compareUnits(previous.units, content.units);
             const dependencies = deriveBattlefieldDependencies(
                 map,
                 previous,
-                applied.content,
-                applied.dependencies,
+                content,
+                changed,
             );
-            const settled = branch.settle(
-                map,
-                previous,
-                applied.content,
-                applied.dependencies,
-            );
-            branch.state = settled.state;
-            return { ...applied.facts, ...settled.facts, dependencies };
+            const settled = branch.settle(previous, content, changed);
+            branch.state = settled;
+            return { lostSupports: getLostSupports(previous.supportRelations, settled.supportRelations, settled.units), dependencies };
         });
         assert.deepEqual(results[0], results[1]);
         assert.deepEqual(branches[0].state, branches[1].state);
@@ -256,18 +252,16 @@ function battlefield(units) {
             );
         },
         publish(work) {
-            return commit(
-                battlefieldView(work).unitIds.map((id) => ({
-                    type: "UPDATE_UNIT",
-                    unit: getUnit(work, id),
-                })),
-            );
+            return commit(previous => ({
+                ...previous,
+                units: new Map([...previous.units, ...battlefieldView(work).unitIds.map(id => [id, getUnit(work, id)])]),
+            }));
         },
         blocked() {
             return h.state.blockingRelations.map((relation) => relation.blockedUnitId);
         },
     };
-    commit(units.map((unit) => ({ type: "REGISTER_UNIT", unit })));
+    commit(previous => ({ ...previous, units: new Map(units.map(unit => [unit.id, unit])) }));
     return h;
 }
 
@@ -310,9 +304,9 @@ test("blocking volume: independent Effect contributions release targets and clea
 test("blocking volume: integer additions honor exclusive groups and restore the remaining candidate", () => {
     const h = battlefield([blocker(4), enemy(1), enemy(2)]);
     const original = h.state.units.get(1);
-    const replace = (state) => h.commit([{ type: "UPDATE_UNIT", unit: {
-        ...h.state.units.get(1), blockable: state,
-    } }]);
+    const replace = (blockableState) => h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
+        ...h.state.units.get(1), blockable: blockableState,
+    }].map(unit => [unit.id, unit])]) }));
     let state = setVolumeContribution(original.blockable, { id: "independent", value: 1 });
     state = setVolumeContribution(state, {
         id: "lower", value: 1, group: { id: "size", priority: 1 },
@@ -345,21 +339,21 @@ test("blocking volume: negative additions still consume one capacity while Rules
     assert.deepEqual(h.blocked(), []);
     for (const value of [-2, -10]) {
         const unit = h.state.units.get(1);
-        h.commit([{ type: "UPDATE_UNIT", unit: {
+        h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
             ...unit, blockable: setVolumeContribution(unit.blockable, { id: "reduced", value }),
-        } }]);
+        }].map(unit => [unit.id, unit])]) }));
         const current = h.state.units.get(1);
         assert.equal(resolveVolume(current.definition.blockable, current.blockable), 1);
         assert.equal(canBeBlocked(current), true);
         assert.deepEqual(h.blocked(), [1]);
         assert.equal(battlefieldView(h.work()).blockingUsedCapacity(0), 1);
     }
-    h.commit([{ type: "REGISTER_UNIT", unit: enemy(2) }]);
+    h.commit(state => ({ ...state, units: new Map([...state.units, ...[enemy(2)].map(unit => [unit.id, unit])]) }));
     assert.deepEqual(h.blocked(), [1]);
     const unit = h.state.units.get(1);
-    h.commit([{ type: "UPDATE_UNIT", unit: {
+    h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
         ...unit, blockable: setRule(unit.blockable, { id: "unblockable", allows: () => false }),
-    } }]);
+    }].map(unit => [unit.id, unit])]) }));
     assert.equal(canBeBlocked(h.state.units.get(1)), false);
     assert.deepEqual(h.blocked(), [2]);
 });
@@ -371,7 +365,7 @@ test("blocking eligibility: overlapping rules release and reacquire targets inde
     const second = { id: "second", allows: () => false };
     const change = (transition) => {
         const unit = h.state.units.get(1);
-        h.commit([{ type: "UPDATE_UNIT", unit: { ...unit, blockable: transition(unit.blockable) } }]);
+        h.commit(state => ({ ...state, units: new Map([...state.units, ...[{ ...unit, blockable: transition(unit.blockable) }].map(unit => [unit.id, unit])]) }));
     };
     change(state => setRule(state, first));
     assert.deepEqual(h.blocked(), [2]);
@@ -397,7 +391,7 @@ test("blocking volume: equivalent contribution changes leave the blocking projec
             { id: "negative", value: -1 },
         ),
     };
-    const result = h.commit([{ type: "UPDATE_UNIT", unit: changed }]);
+    const result = h.commit(state => ({ ...state, units: new Map([...state.units, ...[changed].map(unit => [unit.id, unit])]) }));
     assert.equal(result.dependencies.blocking, false);
     assert.equal(h.state.blockingRelations, before.blockingRelations);
     assert.equal(h.state.spatial, before.spatial);
@@ -526,7 +520,7 @@ test("blocking capacity: replacing contribution entries without changing the res
     };
     assert.notEqual(changed.blocker.capacity, owner.blocker.capacity);
     assert.equal(capacityOf(changed), capacityOf(owner));
-    const result = h.commit([{ type: "UPDATE_UNIT", unit: changed }]);
+    const result = h.commit(state => ({ ...state, units: new Map([...state.units, ...[changed].map(unit => [unit.id, unit])]) }));
     assert.deepEqual(result.dependencies, {
         unitTiles: false,
         occupancy: false,
@@ -538,5 +532,5 @@ test("blocking capacity: replacing contribution entries without changing the res
     assert.equal(h.state.navigation, before.navigation);
     const refreshed = ({ ...h.state.units.get(0), blocker: setCapacityContribution(h.state.units.get(0).blocker, entry("positive", modifier.create({ addition: 1.1 }))) });
     assert.equal(capacityOf(refreshed), 3);
-    assert.equal(h.commit([{ type: "UPDATE_UNIT", unit: refreshed }]).dependencies.blocking, false);
+    assert.equal(h.commit(state => ({ ...state, units: new Map([...state.units, ...[refreshed].map(unit => [unit.id, unit])]) })).dependencies.blocking, false);
 });

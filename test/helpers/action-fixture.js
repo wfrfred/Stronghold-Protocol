@@ -1,7 +1,7 @@
 import { damage as damageTargeting, healing as healingTargeting } from "./targeting.js";
 import {
     create as createBattlefield,
-    transition,
+    addUnits,
 } from "../../dist/core/tactical/battlefield/state.js";
 import { createBattleState } from "../../dist/core/tactical/battle/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
@@ -82,10 +82,7 @@ export function unit(
 
 export function battle(...units) {
     return createBattleState(
-        transition(
-            createBattlefield({ map }),
-            units.map((unit) => ({ type: "REGISTER_UNIT", unit })),
-        ).state,
+        addUnits(createBattlefield({ map }), units),
     );
 }
 

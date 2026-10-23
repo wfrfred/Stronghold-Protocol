@@ -1,5 +1,4 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
-import type { BattlefieldChange } from "../../battlefield/contract.js";
 import {
     createMechanism,
     type MechanismDefinition,
@@ -15,7 +14,6 @@ export interface MechanismPlacementDefinition<D extends MechanismDefinition = Me
 export interface MechanismPlacementInstantiation {
     readonly mechanism: Mechanism;
     readonly execution: BattleExecutionState;
-    readonly changes: readonly BattlefieldChange[];
 }
 
 export function instantiateMechanismPlacement(
@@ -39,6 +37,5 @@ export function instantiateMechanismPlacement(
     return {
         mechanism,
         execution: { ...execution, nextMechanismId },
-        changes: [{ type: "REGISTER_MECHANISM", mechanism }],
     };
 }

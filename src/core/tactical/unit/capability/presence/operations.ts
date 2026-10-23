@@ -1,5 +1,7 @@
 import type { Ref } from "../../../../common/ref.js";
-import { advanceBattlefield, type State as BattleState } from "../../../battle/state.js";
+import { setBattlefield, type State as BattleState } from "../../../battle/state.js";
+import { releaseBlockingRelations } from "../../../battlefield/blocking/relations.js";
+import { maintain } from "../../../battlefield/storage/state.js";
 import type { WorldPosition } from "../../../geometry/coordinate.js";
 import type { Unit } from "../../unit.js";
 import * as units from "../../query.js";
@@ -14,10 +16,7 @@ export function disappear(battle: BattleState, ref: Ref<Unit & SpatialPresence>)
 
     const next = { ...unit, spatialPresence: { present: false } };
 
-    return advanceBattlefield(battle, [
-        { type: "RELEASE_BLOCKING_RELATIONS", unitId: unit.id },
-        { type: "UPDATE_UNIT", unit: next },
-    ]);
+    return changePresence(battle, next);
 }
 
 export function appear(
@@ -33,8 +32,27 @@ export function appear(
 
     const next = { ...unit, position, spatialPresence: { present: true } };
 
-    return advanceBattlefield(battle, [
-        { type: "RELEASE_BLOCKING_RELATIONS", unitId: unit.id },
-        { type: "UPDATE_UNIT", unit: next },
-    ]);
+    return changePresence(battle, next);
+}
+
+function changePresence(battle: BattleState, unit: Unit & SpatialPresence): BattleState {
+    const previous = battle.battlefield;
+    const entries = new Map(previous.units);
+    entries.set(unit.id, unit);
+
+    return setBattlefield(
+        battle,
+        maintain(
+            previous,
+            {
+                ...previous,
+                units: entries,
+                blockingRelations: releaseBlockingRelations(previous.blockingRelations, unit.id),
+            },
+            {
+                updatedUnitIds: new Set([unit.id]),
+                unitOrderChanged: false,
+            },
+        ),
+    );
 }

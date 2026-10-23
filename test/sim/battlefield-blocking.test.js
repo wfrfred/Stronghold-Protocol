@@ -1,6 +1,7 @@
+import { maintain } from '../../dist/core/tactical/battlefield/storage/state.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { create as createFieldState, transition as transitionBattlefield } from '../../dist/core/tactical/battlefield/state.js';
+import { create as createFieldState, addUnits, replaceUnit, removeUnit as removeFieldUnit } from '../../dist/core/tactical/battlefield/state.js';
 import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
@@ -16,7 +17,7 @@ const create = units => {
       playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
     }))),
   });
-  battlefield = transitionBattlefield(battlefield, units.map(unit => ({ type: 'REGISTER_UNIT', unit }))).state;
+  battlefield = addUnits(battlefield, units);
   return battlefield;
 };
 const blocker = (id, position = [1, 1], capacity = 1, radius = 1) => initialize({
@@ -32,9 +33,7 @@ const enemy = (id, position = [1.25, 1], volume = 1) => initialize({
   },
 });
 const view = viewBattlefield;
-const update = (battlefield, id, transition) => ({
-  type: 'UPDATE_UNIT', unit: transition(view(battlefield).getUnit(id)),
-});
+const update = (battlefield, id, transform) => replaceUnit(battlefield, transform(view(battlefield).getUnit(id)));
 const disableBlocking = unit => ({
   ...unit, blocker: setRule(unit.blocker, { id: 'test-disable-blocking', allows: () => false }),
 });
@@ -84,15 +83,14 @@ test('blocking uses current opposing sides and excludes units without allegiance
   }
 
   let battlefield = create([blocker(10), enemy(20)]);
-  battlefield = transitionBattlefield(battlefield, [update(battlefield, 20,
-    unit => ({ ...unit, allegiance: { side: 'NEUTRAL' } }))]).state;
+  battlefield = replaceUnit(battlefield, (unit => ({ ...unit, allegiance: { side: 'NEUTRAL' } }))(view(battlefield).getUnit(20)));
   assert.equal(view(battlefield).blockerOf(20), undefined);
 });
 
 test('a newly registered closer blocker does not replace an existing legal relation', () => {
   let battlefield = create([blocker(10), enemy(20)]);
   const previous = view(battlefield);
-  battlefield = transitionBattlefield(battlefield, [{ type: 'REGISTER_UNIT', unit: blocker(5, [1.125, 1]) }]).state;
+  battlefield = addUnits(battlefield, [blocker(5, [1.125, 1])]);
   assert.equal(view(battlefield).blockerOf(20), 10);
   assert.deepEqual(view(battlefield).blockedBy(5), []);
   assert.equal(previous.blockerOf(20), 10);
@@ -100,7 +98,7 @@ test('a newly registered closer blocker does not replace an existing legal relat
 
 for (const [name, change] of [
   ['dies', battlefield => update(battlefield, 10, unit => ({ ...unit, vitality: { ...unit.vitality, hp: 0 } }))],
-  ['is removed', () => ({ type: 'REMOVE_UNIT', unitId: 10, reason: 'RETREAT' })],
+  ['is removed', battlefield => removeFieldUnit(battlefield, { id: 10 })],
   ['leaves spatial presence', battlefield => update(battlefield, 10, unit => ({ ...unit, spatialPresence: { present: false } }))],
 ]) {
   test(`advance transfers blocking immediately when the old blocker ${name}`, () => {
@@ -108,7 +106,7 @@ for (const [name, change] of [
     const published = view(battlefield);
     assert.equal(published.blockerOf(20), 10);
 
-    battlefield = transitionBattlefield(battlefield, [change(battlefield)]).state;
+    battlefield = change(battlefield);
     assert.equal(view(battlefield).blockerOf(20), 11);
     assert.deepEqual(view(battlefield).blockedBy(10), []);
     assert.equal(published.blockerOf(20), 10);
@@ -118,25 +116,21 @@ for (const [name, change] of [
 test('a blocking rule releases the blocker and its removal acquires without a separate blocking phase', () => {
   let battlefield = create([blocker(10), enemy(20)]);
   assert.equal(view(battlefield).blockerOf(20), 10);
-  battlefield = transitionBattlefield(battlefield, [update(battlefield, 10, disableBlocking)]).state;
+  battlefield = replaceUnit(battlefield, (disableBlocking)(view(battlefield).getUnit(10)));
   assert.equal(view(battlefield).blockerOf(20), undefined);
 
-  battlefield = transitionBattlefield(battlefield, [update(battlefield, 10, enableBlocking)]).state;
+  battlefield = replaceUnit(battlefield, (enableBlocking)(view(battlefield).getUnit(10)));
   assert.equal(view(battlefield).blockerOf(20), 10);
 });
 
-test('one transition reconciles against final batch facts before returning any new relation', () => {
+test('an atomic content update preserves existing relations against final unit facts', () => {
   let battlefield = create([blocker(10), enemy(20)]);
   const published = view(battlefield);
   const original = view(battlefield).getUnit(10);
-  battlefield = transitionBattlefield(battlefield, [
-    { type: 'UPDATE_UNIT', unit: disableBlocking(original) },
-    { type: 'REGISTER_UNIT', unit: blocker(5, [1.125, 1]) },
-    { type: 'UPDATE_UNIT', unit: original },
-  ]).state;
-  assert.equal(view(battlefield).blockerOf(20), 10, 'temporary blocking denial inside the batch must not transfer the relation');
+  battlefield = maintain(battlefield, { ...battlefield, units: new Map([...battlefield.units, ...[blocker(5, [1.125, 1])].map(unit => [unit.id, unit])]) });
+  assert.equal(view(battlefield).blockerOf(20), 10, 'the atomic update must retain the existing legal relation');
 
-  battlefield = transitionBattlefield(battlefield, [update(battlefield, 10, disableBlocking)]).state;
+  battlefield = replaceUnit(battlefield, (disableBlocking)(view(battlefield).getUnit(10)));
   assert.equal(view(battlefield).blockerOf(20), 5);
   assert.equal(published.blockerOf(20), 10);
 });
@@ -146,25 +140,25 @@ test('capacity changes retain fitting old relations and fill restored capacity u
   assert.deepEqual(view(battlefield).blockedBy(10), [20, 21]);
   assert.equal(view(battlefield).blockingUsedCapacity(10), 3);
 
-  battlefield = transitionBattlefield(battlefield, [update(battlefield, 10, unit => capacityChange(unit, -2))]).state;
+  battlefield = replaceUnit(battlefield, (unit => capacityChange(unit, -2))(view(battlefield).getUnit(10)));
   assert.deepEqual(view(battlefield).blockedBy(10), [21]);
   assert.equal(view(battlefield).blockingUsedCapacity(10), 1);
 
-  battlefield = transitionBattlefield(battlefield, [update(battlefield, 10, unit => capacityChange(unit, 0))]).state;
+  battlefield = replaceUnit(battlefield, (unit => capacityChange(unit, 0))(view(battlefield).getUnit(10)));
   assert.deepEqual(view(battlefield).blockedBy(10), [21, 20]);
   assert.equal(view(battlefield).blockingUsedCapacity(10), 3);
 
-  battlefield = transitionBattlefield(battlefield, [update(battlefield, 21, unit => ({ ...unit, vitality: { ...unit.vitality, hp: 0 } }))]).state;
+  battlefield = replaceUnit(battlefield, (unit => ({ ...unit, vitality: { ...unit.vitality, hp: 0 } }))(view(battlefield).getUnit(21)));
   assert.deepEqual(view(battlefield).blockedBy(10), [20, 22]);
   assert.equal(view(battlefield).blockingUsedCapacity(10), 3);
 
-  battlefield = transitionBattlefield(battlefield, [update(battlefield, 20, unit => ({
+  battlefield = replaceUnit(battlefield, (unit => ({
     ...unit, blockable: setVolumeContribution(unit.blockable, { id: 'volume', value: 2 }),
-  }))]).state;
+  }))(view(battlefield).getUnit(20)));
   assert.deepEqual(view(battlefield).blockedBy(10), [22]);
-  battlefield = transitionBattlefield(battlefield, [update(battlefield, 20, unit => ({
+  battlefield = replaceUnit(battlefield, (unit => ({
     ...unit, blockable: setVolumeContribution(unit.blockable, { id: 'volume', value: 0 }),
-  }))]).state;
+  }))(view(battlefield).getUnit(20)));
   assert.deepEqual(view(battlefield).blockedBy(10), [22, 20]);
   assert.equal(view(battlefield).blockingUsedCapacity(10), 3);
 });
@@ -175,7 +169,7 @@ test('position changes within one indexed tile trigger acquisition at the inclus
     assert.equal(view(battlefield).blockerOf(20), undefined);
     assert.deepEqual(view(battlefield).unitsAt([1, 1]).map(unit => unit.id), [10, 20]);
 
-    battlefield = transitionBattlefield(battlefield, [update(battlefield, id, unit => ({ ...unit, position }))]).state;
+    battlefield = replaceUnit(battlefield, (unit => ({ ...unit, position }))(view(battlefield).getUnit(id)));
     assert.equal(view(battlefield).blockerOf(20), 10);
   }
 });
@@ -187,9 +181,9 @@ test('radius changes query neighboring indexed tiles while exact geometry exclud
   assert.deepEqual(view(battlefield).blockedBy(10), []);
   assert.deepEqual(view(battlefield).unitsAt([1, 2]).map(unit => unit.id), [20, 21]);
 
-  battlefield = transitionBattlefield(battlefield, [update(battlefield, 10, unit => ({
+  battlefield = replaceUnit(battlefield, (unit => ({
     ...unit, blocker: { ...unit.blocker, geometry: { radius: 0.25 } },
-  }))]).state;
+  }))(view(battlefield).getUnit(10)));
   assert.deepEqual(view(battlefield).blockedBy(10), [20]);
 });
 

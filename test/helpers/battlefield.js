@@ -1,4 +1,5 @@
-import { create, transition } from "../../dist/core/tactical/battlefield/state.js";
+import { maintain } from "../../dist/core/tactical/battlefield/storage/state.js";
+import { create } from "../../dist/core/tactical/battlefield/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
 
@@ -17,9 +18,7 @@ export function fixtureBattlefieldState(input, mechanisms = input) {
     const units = Array.isArray(input) ? input : input.unitIds.map((id) => input.getUnit(id));
     let state = create({ map: Array.isArray(input) ? defaultMap : (input.map ?? defaultMap) });
     if (input.navigation !== undefined) state = { ...state, navigation: input.navigation };
-    const changes = units.map((unit) => ({ type: "REGISTER_UNIT", unit }));
-    for (const id of mechanisms?.mechanismIds ?? [])
-        changes.push({ type: "REGISTER_MECHANISM", mechanism: mechanisms.getMechanism(id) });
+    const registeredMechanisms = (mechanisms?.mechanismIds ?? []).map(id => [id, mechanisms.getMechanism(id)]);
     for (const id of input.projectileIds ?? [])
         state = { ...state, projectiles: state.projectiles.add(input.getProjectile(id)) };
     const relations =
@@ -28,8 +27,11 @@ export function fixtureBattlefieldState(input, mechanisms = input) {
             const blockerUnitId = input.blockerOf?.(unit.id);
             return blockerUnitId === undefined ? [] : [{ blockerUnitId, blockedUnitId: unit.id }];
         });
-    if (relations.length) changes.push({ type: "SET_BLOCKING_RELATIONS", relations });
-    if (input.supportRelations?.length)
-        changes.push({ type: "SET_SUPPORT_RELATIONS", relations: input.supportRelations });
-    return transition(state, changes).state;
+    return maintain(state, {
+        ...state,
+        units: new Map(units.map(unit => [unit.id, unit])),
+        mechanisms: new Map(registeredMechanisms),
+        blockingRelations: relations.length ? relations : state.blockingRelations,
+        supportRelations: input.supportRelations?.length ? input.supportRelations : state.supportRelations,
+    });
 }

@@ -1,26 +1,15 @@
-import type { Unit } from "../unit/unit.js";
-import type {
-    BattlefieldChange,
-    BattlefieldChangeResult,
-    BattlefieldRuntimeOptions,
-} from "./contract.js";
+import { assertNonnegativeSafeInteger } from "../../common/assert.js";
+import type { Ref } from "../../common/ref.js";
+import type { Unit, Id } from "../unit/unit.js";
+import type { BattlefieldRuntimeOptions } from "./contract.js";
 import type { BattlefieldMap } from "./map/map.js";
+import type { Mechanism } from "./mechanism.js";
 import * as maps from "./map/navigation.js";
 import * as navigation from "./navigation/state.js";
-import { applyBattlefieldChanges } from "./storage/changes.js";
-import {
-    createBattlefieldState,
-    settleBattlefieldState,
-    type BattlefieldState,
-} from "./storage/state.js";
+import { createBattlefieldState, maintain, type BattlefieldState } from "./storage/state.js";
 
 export interface State<U extends Unit = Unit> extends BattlefieldState<U> {
     readonly map: BattlefieldMap;
-}
-
-export interface Result<U extends Unit = Unit> {
-    readonly state: State<U>;
-    readonly facts: BattlefieldChangeResult<U>;
 }
 
 export function create<U extends Unit = Unit>(options: BattlefieldRuntimeOptions): State<U> {
@@ -35,22 +24,137 @@ export function create<U extends Unit = Unit>(options: BattlefieldRuntimeOptions
     };
 }
 
-export function transition<U extends Unit>(
-    previous: State<U>,
-    changes: readonly BattlefieldChange<U>[],
-): Result<U> {
-    const applied = applyBattlefieldChanges<U>(previous, changes);
-    const settled = settleBattlefieldState<U>(
-        previous.map,
-        previous,
-        applied.content,
-        applied.dependencies,
-    );
+function requireEntry<K extends number, V>(entries: ReadonlyMap<K, V>, key: K, name: string): V {
+    const value = entries.get(key);
 
-    return {
-        state: settled.state === previous ? previous : { map: previous.map, ...settled.state },
-        facts: { ...applied.facts, ...settled.facts },
-    };
+    if (value === undefined) {
+        throw new RangeError(`unknown ${name}: ${key}`);
+    }
+
+    return value;
+}
+
+export function addUnit<U extends Unit>(state: State<U>, unit: U): State<U> {
+    return addUnits(state, [unit]);
+}
+
+export function addUnits<U extends Unit>(state: State<U>, incoming: readonly U[]): State<U> {
+    if (incoming.length === 0) {
+        return state;
+    }
+
+    const units = new Map(state.units);
+    const updatedUnitIds = new Set<Id>();
+
+    for (const unit of incoming) {
+        assertNonnegativeSafeInteger(unit.id, "unit id");
+
+        if (units.has(unit.id)) {
+            throw new RangeError(`duplicate unit: ${unit.id}`);
+        }
+
+        units.set(unit.id, unit);
+        updatedUnitIds.add(unit.id);
+    }
+
+    return maintain(
+        state,
+        { ...state, units },
+        {
+            updatedUnitIds,
+            unitOrderChanged: true,
+        },
+    );
+}
+
+export function replaceUnit<U extends Unit>(state: State<U>, unit: U): State<U> {
+    return replaceUnits(state, [unit]);
+}
+
+export function replaceUnits<U extends Unit>(state: State<U>, incoming: readonly U[]): State<U> {
+    let units: Map<Id, U> | undefined;
+    const updatedUnitIds = new Set<Id>();
+
+    for (const unit of incoming) {
+        const previous = requireEntry(units ?? state.units, unit.id, "unit");
+
+        if (previous.definition !== unit.definition) {
+            throw new RangeError("unit definition cannot change during update");
+        }
+
+        if (previous !== unit) {
+            units ??= new Map(state.units);
+            units.set(unit.id, unit);
+            updatedUnitIds.add(unit.id);
+        }
+    }
+
+    return units === undefined
+        ? state
+        : maintain(
+              state,
+              { ...state, units },
+              {
+                  updatedUnitIds,
+                  unitOrderChanged: false,
+              },
+          );
+}
+
+export function removeUnit<U extends Unit>(state: State<U>, reference: Ref<Unit>): State<U> {
+    requireEntry(state.units, reference.id, "unit");
+    const units = new Map(state.units);
+    units.delete(reference.id);
+
+    return maintain(
+        state,
+        { ...state, units },
+        {
+            updatedUnitIds: new Set([reference.id]),
+            unitOrderChanged: true,
+        },
+    );
+}
+
+export function addMechanism<U extends Unit>(state: State<U>, mechanism: Mechanism): State<U> {
+    assertNonnegativeSafeInteger(mechanism.id, "mechanism id");
+
+    if (state.mechanisms.has(mechanism.id)) {
+        throw new RangeError(`duplicate mechanism: ${mechanism.id}`);
+    }
+
+    const mechanisms = new Map(state.mechanisms);
+    mechanisms.set(mechanism.id, mechanism);
+
+    return maintain(state, { ...state, mechanisms });
+}
+
+export function replaceMechanism<U extends Unit>(state: State<U>, mechanism: Mechanism): State<U> {
+    const previous = requireEntry(state.mechanisms, mechanism.id, "mechanism");
+
+    if (previous.definition !== mechanism.definition) {
+        throw new RangeError("mechanism definition cannot change during update");
+    }
+
+    if (previous === mechanism) {
+        return state;
+    }
+
+    const mechanisms = new Map(state.mechanisms);
+    mechanisms.set(mechanism.id, mechanism);
+
+    return maintain(state, { ...state, mechanisms });
+}
+
+export function removeMechanism<U extends Unit>(
+    state: State<U>,
+    reference: Ref<Mechanism>,
+): State<U> {
+    requireEntry(state.mechanisms, reference.id, "mechanism");
+    const mechanisms = new Map(state.mechanisms);
+    mechanisms.delete(reference.id);
+
+    return maintain(state, { ...state, mechanisms });
 }
 
 export function setNavigation<U extends Unit>(state: State<U>, next: navigation.State): State<U> {

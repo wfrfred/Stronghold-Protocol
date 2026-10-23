@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialize } from "../helpers/unit.js";
 import {
-    advanceBattlefield,
+    registerUnits,
+    setBattlefield,
     battlefieldView,
     createBattleState,
     getUnit,
@@ -12,8 +13,7 @@ import {
 import { create as createBattlefield } from "../../dist/core/tactical/battlefield/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
-import { applyBattlefieldChanges } from "../../dist/core/tactical/battlefield/storage/changes.js";
-import { settleBattlefieldStateFully } from "../../dist/core/tactical/battlefield/storage/state.js";
+import { maintain, maintainFully } from "../../dist/core/tactical/battlefield/storage/state.js";
 import * as blocker from "../../dist/core/tactical/unit/capability/blocking/blocker.js";
 import * as blockable from "../../dist/core/tactical/unit/capability/blocking/blockable.js";
 import * as locomotion from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
@@ -25,7 +25,7 @@ const blockingRuleId = "@blocking/blocked";
 const context = { mode: "WALK", speedMultiplier: 1 };
 const blockingRule = (unit) => unit.locomotion.rules.find((rule) => rule.id === blockingRuleId);
 const relation = (blockerUnitId, blockedUnitId) => ({ blockerUnitId, blockedUnitId });
-const register = (units) => units.map((unit) => ({ type: "REGISTER_UNIT", unit }));
+const register = units => state => ({ ...state, units: new Map([...state.units, ...units.map(unit => [unit.id, unit])]) });
 
 function fixture(units = []) {
     const tile = createTile({
@@ -33,7 +33,7 @@ function fixture(units = []) {
         playerSideMask: "ALL", terrain: "NORMAL", mechanism: null,
     });
     const map = createBattlefieldMap(3, 10, Array(30).fill(tile));
-    return advanceBattlefield(createBattleState(createBattlefield({ map })), register(units));
+    return registerUnits(createBattleState(createBattlefield({ map })), units);
 }
 
 const holder = (id = 10, { position = [2, 1], capacity = 1 } = {}) => initialize({
@@ -102,9 +102,9 @@ test("Blocking automatically installs one shared movement rule without changing 
     assertStopped(battle, 21);
 
     const current = getUnit(battle, 20);
-    battle = advanceBattlefield(battle, register([initialize({
+    battle = registerUnits(battle, [initialize({
         id: 30, position: [9, 1], definition: { id: "unrelated-unit" },
-    })]));
+    })]);
     assert.equal(getUnit(battle, 20), current, "an existing rule must not rebuild an unchanged unit");
     assert.equal(blockingRule(getUnit(battle, 20)), rule);
 });
@@ -112,15 +112,20 @@ test("Blocking automatically installs one shared movement rule without changing 
 test("Blocking release reacquires in the same settlement, and moving out of range removes the rule", () => {
     let battle = fixture([holder(), mover()]);
     const rule = blockingRule(getUnit(battle, 20));
-    battle = advanceBattlefield(battle, [{ type: "RELEASE_BLOCKING_RELATIONS", unitId: 20 }]);
+    battle = setBattlefield(battle, maintain(battle.battlefield, {
+        ...battle.battlefield,
+        blockingRelations: battle.battlefield.blockingRelations.filter(relation => relation.blockerUnitId !== 20 && relation.blockedUnitId !== 20),
+    }));
     assert.equal(battlefieldView(battle).blockerOf(20), 10);
     assert.equal(blockingRule(getUnit(battle, 20)), rule);
     assert.equal(getUnit(battle, 20).locomotion.rules.length, 1);
     assertStopped(battle);
 
-    battle = advanceBattlefield(battle, [{
-        type: "SET_POSITION_AND_RELEASE_BLOCKING", unitId: 20, position: [6, 1],
-    }]);
+    battle = setBattlefield(battle, maintain(battle.battlefield, {
+        ...battle.battlefield,
+        units: new Map([...battle.battlefield.units, [20, { ...getUnit(battle, 20), position: [6, 1] }]]),
+        blockingRelations: [],
+    }));
     assert.equal(battlefieldView(battle).blockerOf(20), undefined);
     assert.equal(blockingRule(getUnit(battle, 20)), undefined);
     assertMoves(battle);
@@ -223,7 +228,7 @@ test("Blocking removes only its own rule and preserves other movement restrictio
     assertMoves(battle);
 });
 
-test("UPDATE_UNIT restores a missing Blocking rule even when the relation and blocking facts do not change", () => {
+test("updateUnit restores a missing Blocking rule even when the relation and blocking facts do not change", () => {
     const unblocked = mover();
     let battle = fixture([holder(), unblocked]);
     const relations = battle.battlefield.blockingRelations;
@@ -273,24 +278,13 @@ test("Incremental and full settlement publish the same rules and movement across
     const branches = [initial, initial];
     const snapshot = (battle) => JSON.stringify(battle.battlefield, (_key, value) =>
         value instanceof Map || value instanceof Set ? [...value] : value);
-    const commit = (changes, blockedIds) => {
-        const batch = typeof changes === "function" ? changes(branches[0]) : changes;
+    const commit = (transform, blockedIds) => {
+        const content = transform(branches[0].battlefield);
         for (let index = 0; index < branches.length; index++) {
             const previous = branches[index];
             const oldSnapshot = snapshot(previous);
-            if (index === 0) {
-                branches[index] = advanceBattlefield(previous, batch);
-            } else {
-                const applied = applyBattlefieldChanges(previous.battlefield, batch);
-                const settled = settleBattlefieldStateFully(
-                    previous.battlefield.map, previous.battlefield, applied.content,
-                );
-                branches[index] = {
-                    ...previous,
-                    battlefield: { map: previous.battlefield.map, ...settled.state },
-                    removedUnits: [...previous.removedUnits, ...applied.facts.removedUnits],
-                };
-            }
+            const next = (index === 0 ? maintain : maintainFully)(previous.battlefield, content);
+            branches[index] = setBattlefield(previous, next);
             assert.equal(snapshot(previous), oldSnapshot, "settlement must preserve its previous state");
             for (const id of [20, 21]) {
                 const unit = getUnit(branches[index], id);
@@ -301,12 +295,12 @@ test("Incremental and full settlement publish the same rules and movement across
         }
         assert.deepEqual(branches[0].battlefield, branches[1].battlefield);
     };
-    const update = (id, transition) => (battle) => [{
-        type: "UPDATE_UNIT", unit: transition(getUnit(battle, id)),
-    }];
-    commit(register([holder(10, { capacity: 2 }), mover(20), mover(21)]), [20, 21]);
+    const update = (id, transform) => state => ({
+        ...state, units: new Map([...state.units, [id, transform(state.units.get(id))]]),
+    });
+    commit(state => ({ ...state, units: new Map([...state.units, ...[holder(10, { capacity: 2 }), mover(20), mover(21)].map(unit => [unit.id, unit])]) }), [20, 21]);
     commit(update(20, (unit) => ({ ...unit, locomotion: { ...unit.locomotion, rules: [] } })), [20, 21]);
-    commit([{ type: "RELEASE_BLOCKING_RELATIONS", unitId: 10 }], [20, 21]);
+    commit(state => ({ ...state, blockingRelations: (state.blockingRelations).filter(relation => relation.blockerUnitId !== 10 && relation.blockedUnitId !== 10) }), [20, 21]);
     commit(update(20, (unit) => ({ ...unit, layer: { type: "AIR" } })), [21]);
     commit(update(20, (unit) => ({ ...unit, layer: { type: "GROUND" } })), [20, 21]);
     commit(update(10, (unit) => ({
@@ -314,10 +308,10 @@ test("Incremental and full settlement publish the same rules and movement across
             id: "less-capacity", value: [modifier({ addition: -1 })],
         }),
     })), [21]);
-    commit([{ type: "REMOVE_UNIT", unitId: 10, reason: "SCRIPT" }], []);
-    commit([{ type: "REGISTER_UNIT", unit: holder(11, { position: [3, 1], capacity: 2 }) }], [20, 21]);
-    commit([{ type: "SET_POSITION_AND_RELEASE_BLOCKING", unitId: 20, position: [6, 1] }], [21]);
-    commit([{ type: "SET_BLOCKING_RELATIONS", relations: [relation(11, 20), relation(11, 21)] }], [20, 21]);
+    commit(state => ({ ...state, units: new Map([...state.units].filter(([id]) => id !== 10)) }), []);
+    commit(state => ({ ...state, units: new Map([...state.units, ...[holder(11, { position: [3, 1], capacity: 2 })].map(unit => [unit.id, unit])]) }), [20, 21]);
+    commit(state => ({ ...state, units: new Map([...state.units].map(([id, unit]) => [id, id === 20 ? { ...unit, position: [6, 1] } : unit])), blockingRelations: (state.blockingRelations).filter(relation => relation.blockerUnitId !== 20 && relation.blockedUnitId !== 20) }), [21]);
+    commit(state => ({ ...state, blockingRelations: [relation(11, 20), relation(11, 21)] }), [20, 21]);
     commit(update(20, (unit) => ({
         ...unit, blockable: blockable.setVolumeContribution(unit.blockable, { id: "too-large", value: 2 }),
     })), [21]);

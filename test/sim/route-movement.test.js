@@ -1,7 +1,8 @@
+import { maintain } from '../../dist/core/tactical/battlefield/storage/state.js';
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-    advanceBattlefield, battlefieldView, createBattleState, getUnit, registerUnit,
+    setBattlefield, battlefieldView, createBattleState, getUnit, registerUnit,
 } from "../../dist/core/tactical/battle/state.js";
 import { advanceMovement } from "../../dist/core/tactical/battle/steps/movement.js";
 import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
@@ -80,7 +81,7 @@ test("Main completion stops motion while blocked and produces one event only whe
     state = registerUnit(state, {
         ...enemy, locomotion: { ...enemy.locomotion, velocity: [1, 0] },
     });
-    state = advanceBattlefield(state, [{ type: "SET_BLOCKING_RELATIONS", relations: [{ blockerUnitId: 1, blockedUnitId: 2 }] }]);
+    state = setBattlefield(state, maintain(state.battlefield, { ...state.battlefield, blockingRelations: [{ blockerUnitId: 1, blockedUnitId: 2 }] }));
     const first = step(state);
     assert.equal(getUnit(first, 2).route.main.phase.type, "COMPLETED");
     assert.deepEqual(getUnit(first, 2).position, [0, 0]);

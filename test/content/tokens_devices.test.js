@@ -9,7 +9,7 @@ import { genericKit } from '../../server/sim/content/generic.js';
 import { spawnYanyou, spawnMapChar, TOKEN_IDS, wolfShadows, tileFree, findSummonTile, summonToken } from '../../server/sim/content/tokens.js';
 import { startColdWind, kjeragColdWind, activateTurrets, terrainAt, deviceOverridesOf } from '../../server/sim/content/devices.js';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
-import { create as createFieldState, transition as transitionBattlefield } from '../../dist/core/tactical/battlefield/state.js';
+import { create as createFieldState, addUnits, removeUnit as removeFieldUnit } from '../../dist/core/tactical/battlefield/state.js';
 import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
 import { apply as applyOverlays } from '../../dist/core/tactical/battlefield/navigation/overlay.js';
 const navigationMap = (state, mode = 'WALK') => applyOverlays(state.baseline[mode], state.overlays[mode]);
@@ -1271,7 +1271,7 @@ test('core act1 m02 keeps hidden crate recipes out of the battlefield and applie
   const removed = runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId, reason: 'SCRIPT' }]);
   const [departed] = removed.events;
   assert.deepEqual(removed.events.map(({ unit, ...event }) => event), [{ type: 'UNIT_REMOVED', unitId: unit.id, reason: 'SCRIPT', tick: 2 }]);
-  assert.deepEqual(departed.unit.effects.values(), []);
+  assert.deepEqual(departed.unit.effects.values().toArray(), []);
   assert.deepEqual({ ...departed.unit, effects: unit.effects }, { ...unit, lifecycle: 'LEAVING' });
   assert.deepEqual(runtime.snapshot().units, []);
 
@@ -1553,7 +1553,7 @@ test('core real hidden platforms grant ranged deployment support while retaining
   assert.equal(runtime.navigation.baseline.FLY, originalMaps.baseline.FLY);
 
   let field = createFieldState({ map: scenario.spec.map });
-  field = transitionBattlefield(field, appeared.units.map(unit => ({ type: 'REGISTER_UNIT', unit }))).state;
+  field = addUnits(field, appeared.units);
   assert.deepEqual(viewBattlefield(field).occupancyAt(tile, 'SUPPORT'), [platform.id]);
   assert.deepEqual(evaluateDeployment(viewBattlefield(field), { profile: { buildableType: 'RANGED', advancedBuildableMask: 1 },
     tile, playerSide: 'SIDE_A' }), { type: 'ALLOWED', supportUnitId: platform.id });
@@ -1564,6 +1564,6 @@ test('core real hidden platforms grant ranged deployment support while retaining
   assert.equal(runtime.snapshot().units.some(unit => unit.id === platform.id), false);
   assert.deepEqual(navigationMap(runtime.navigation).get(tile), originalCell);
   assert.equal(runtime.navigation.baseline.FLY, originalMaps.baseline.FLY);
-  field = transitionBattlefield(field, [{ type: 'REMOVE_UNIT', unitId: platform.id, reason: 'SCRIPT' }]).state;
+  field = removeFieldUnit(field, { id: platform.id });
   assert.deepEqual(viewBattlefield(field).occupancyAt(tile, 'SUPPORT'), []);
 });

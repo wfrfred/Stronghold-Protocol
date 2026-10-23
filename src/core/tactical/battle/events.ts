@@ -1,10 +1,9 @@
-import type { BattlefieldChangeResult } from "../battlefield/contract.js";
-import type { Event } from "./contract.js";
+import type { Event, UnitRemoval } from "./contract.js";
 import { copy } from "../unit/snapshot.js";
 
 export function finishBattleEvents(
     phaseEvents: readonly Event[],
-    removedUnits: BattlefieldChangeResult["removedUnits"],
+    removedUnits: readonly UnitRemoval[],
     tick: number,
 ) {
     const events: Event[] = [

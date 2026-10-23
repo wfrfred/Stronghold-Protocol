@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { create as createFieldState, transition as transitionBattlefield } from '../../dist/core/tactical/battlefield/state.js';
+import { create as createFieldState, addUnits, replaceUnits } from '../../dist/core/tactical/battlefield/state.js';
 import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
@@ -97,7 +97,7 @@ const definition = () => ({
 test("battlefield registration retains initialized capabilities and shared definitions", () => {
     let runtime = createFieldState({ map: map() });
     const unit = initialize({ id: 1, definition: definition(), position: [0, 0] });
-    runtime = transitionBattlefield(runtime, [{ type: "REGISTER_UNIT", unit }]).state;
+    runtime = addUnits(runtime, [unit]);
     assert.equal(viewBattlefield(runtime).getUnit(1), unit);
     assert.deepEqual(
         viewBattlefield(runtime)
@@ -107,25 +107,22 @@ test("battlefield registration retains initialized capabilities and shared defin
     );
 });
 
-test("battlefield transition preserves configured capability composition on update", () => {
+test("battlefield replacement preserves configured capability composition on update", () => {
     let runtime = createFieldState({ map: map() });
     const unit = initialize({ id: 1, definition: definition(), position: [0, 0] });
     const bare = initialize({ id: 2, definition: { id: "bare" }, position: [2, 0] });
-    runtime = transitionBattlefield(runtime, [
-        { type: "REGISTER_UNIT", unit },
-        { type: "REGISTER_UNIT", unit: bare },
-    ]).state;
+    runtime = addUnits(runtime, [unit, bare]);
     const updated = {
         ...unit,
         action: { ...unit.action, states: unit.action.states.read("normal", current => unit.action.states.replace(current.definition, { ...current, cooldown: { periodTicks: 3, readyAtTick: 7 } })) },
         spatialPresence: { present: false },
         occupancy: { claims: [] },
     };
-    runtime = transitionBattlefield(runtime, [{ type: "UPDATE_UNIT", unit: updated }]).state;
+    runtime = replaceUnits(runtime, [updated]);
     assert.deepEqual(viewBattlefield(runtime).getUnit(1).action, updated.action);
     assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 0]), []);
     const restored = { ...updated, spatialPresence: { present: true }, occupancy: { claims: [] } };
-    runtime = transitionBattlefield(runtime, [{ type: "UPDATE_UNIT", unit: restored }]).state;
+    runtime = replaceUnits(runtime, [restored]);
     assert.deepEqual(
         viewBattlefield(runtime)
             .unitsAt([0, 0])
@@ -163,16 +160,16 @@ import { Effects } from ${sourceModule("unit/effect/effects")};
 import type { Action } from ${sourceModule("unit/capability/action/capability")};
 import type { ImmutableData } from ${sourceModule("../common/immutable-data")};
 import type { BattlefieldMap } from ${sourceModule("battlefield/map/map")};
-import { create, transition } from ${sourceModule("battlefield/state")};
+import { create, addUnit } from ${sourceModule("battlefield/state")};
 type ActingDefinition = Definition & Action['definition'];
 declare const definition: ImmutableData<ActingDefinition>;
 declare const map: BattlefieldMap;
 const unit = { id: 1, definition, position: [0, 0], effects: Effects.empty(), lifecycle: 'PRESENT' } satisfies Unit;
 const baseUnit: Unit = unit;
 const battlefield = create({ map });
-transition(battlefield, [{ type: 'REGISTER_UNIT', unit: baseUnit }]);
+addUnit(battlefield, baseUnit);
 const custom = create<typeof unit>({ map });
-transition(custom, [{ type: 'REGISTER_UNIT', unit }]);
+addUnit(custom, unit);
 `,
         );
         const program = ts.createProgram([path], {
