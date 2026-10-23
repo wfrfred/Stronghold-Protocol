@@ -1,18 +1,21 @@
 import { initialize as initializeRoutedUnit } from "../creation/routed-unit.js";
-import type { Unit } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
-import { registerUnits, appendEvents, type State as BattleState, type Result } from "../state.js";
+import { registerUnit, appendEvents, type State as BattleState } from "../state.js";
 import { advanceSpawnSchedule, recordScheduleSpawns } from "../schedule/runtime.js";
-import type { ScheduledEnemySpawn } from "../schedule/definition.js";
 import { enter } from "../execution/unit.js";
 
-function spawnEnemies(
+export function advanceSpawning(
     state: BattleState,
-    spawns: readonly ScheduledEnemySpawn[],
-): Result<readonly Unit[]> {
-    const enemies: Unit[] = [];
+    commands: readonly Command[],
+    tick: number,
+): BattleState {
+    const scheduled = advanceSpawnSchedule(state.schedule, {
+        tick,
+        triggers: commands.filter((command) => command.type === "TRIGGER_BRANCH"),
+    });
+    state = { ...state, schedule: scheduled.state };
 
-    for (const spawn of spawns) {
+    for (const spawn of scheduled.spawns) {
         const id = state.execution.nextUnitId;
         const nextUnitId = id + 1;
 
@@ -29,41 +32,15 @@ function spawnEnemies(
             alwaysCheckCurrentPoint: spawn.alwaysCheckCurrentPoint,
         });
         state = initialized.state;
-        enemies.push(initialized.value);
+        const unit = initialized.value;
+        state = {
+            ...state,
+            schedule: recordScheduleSpawns(state.schedule, [spawn], [unit.id]),
+        };
+        state = appendEvents(state, [{ type: "ENEMY_SPAWNED", unitId: unit.id, tick }]);
+        state = registerUnit(state, unit);
+        state = enter(state, unit.id);
     }
-
-    return { state, value: enemies };
-}
-
-export function advanceSpawning(
-    state: BattleState,
-    commands: readonly Command[],
-    tick: number,
-): BattleState {
-    const scheduled = advanceSpawnSchedule(state.schedule, {
-        tick,
-        triggers: commands.filter((command) => command.type === "TRIGGER_BRANCH"),
-    });
-    const initialized = spawnEnemies(state, scheduled.spawns);
-    state = initialized.state;
-    const enemies = initialized.value;
-    state = {
-        ...state,
-        schedule: recordScheduleSpawns(
-            scheduled.state,
-            scheduled.spawns,
-            enemies.map((enemy) => enemy.id),
-        ),
-    };
-    state = appendEvents(
-        state,
-        enemies.map((enemy) => ({ type: "ENEMY_SPAWNED", unitId: enemy.id, tick })),
-    );
-    state = registerUnits(state, enemies);
-    state = enter(
-        state,
-        enemies.map((unit) => unit.id),
-    );
 
     return state;
 }

@@ -43,7 +43,6 @@ test("initial entry receives the complete battle state and its returned facts pe
     const onEnter = (state, id) => {
         observations.push(state);
         assert.equal(state.schedule.definition.spawns.length, 1);
-        assert.deepEqual(state.predefinedPresence, [{ definitionId: 7, source: { type: "UNIT", unitId: 1 } }]);
         assert.equal(state.result, null);
         assert.equal(state.deployment.cards.length, 0);
         assert.equal(state.battlefield.units.has(id), true);
@@ -54,6 +53,10 @@ test("initial entry receives the complete battle state and its returned facts pe
         predefines: [predefined(7, { id: "predefined", onEnter }, true)],
     }));
     assert.equal(observations.length, 2);
+    assert.deepEqual(observations[0].predefinedPresence, []);
+    assert.deepEqual([...observations[0].battlefield.units.keys()], [0]);
+    assert.deepEqual(observations[1].predefinedPresence, [{ definitionId: 7, source: { type: "UNIT", unitId: 1 } }]);
+    assert.deepEqual([...observations[1].battlefield.units.keys()], [0, 1]);
     assert.equal(observations[0].completedRouteCount, 0);
     assert.equal(observations[1].completedRouteCount, 1);
     assert.equal(battle.snapshot().completedRouteCount, 2);

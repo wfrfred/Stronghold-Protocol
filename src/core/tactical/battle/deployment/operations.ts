@@ -171,7 +171,7 @@ export function deploy(state: BattleState, request: DeployRequest): Result<Deplo
             tick: state.tick,
         },
     ]);
-    state = enter(state, [unit.id]);
+    state = enter(state, unit.id);
     state = notifyDeployed(state, { unit, kind: "MANUAL" });
 
     return { state, value: { type: "DEPLOYED", cardId: value.id, unitId: unit.id } };

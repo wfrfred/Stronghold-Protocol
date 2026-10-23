@@ -37,7 +37,7 @@ test('Melantha uses main-mode level, potential, trust and talent, then a scoped 
   assert.equal(unit.deployable.refundAllowed, false);
   let state = createBattleState(fixtureBattlefieldState([unit]));
   const untouched = state;
-  state = enter(state, [0]);
+  state = enter(state, 0);
   const entered = state;
   const base = (738 + 25 + 65) * 1.08;
   assert.equal(resolveAttack(state, unitRef(getUnit(state, 0))), base);
@@ -61,7 +61,7 @@ test('explicit skill finish removes only skill output, preserving Melantha talen
 
   const definition = create(profile({ level: 1, potential: 1, trust: 0 }));
   let state = createBattleState(fixtureBattlefieldState([initialize({ id: 0, position: [0, 0], definition })]));
-  state = enter(state, [0]);
+  state = enter(state, 0);
   const before = resolveAttack(state, unitRef(getUnit(state, 0)));
   state = updateUnit(state, { ...getUnit(state, 0), skill: { ...getUnit(state, 0).skill, sp: { ...getUnit(state, 0).skill.sp, value: 40 } } });
   state = activateSkill({ ...state, tick: 0  }, unitRef(getUnit(state, 0))).state;
@@ -79,7 +79,7 @@ test('ordinary attacks read current talent and skill contributions instead of ca
     hitbox: { shape: { type: 'CIRCLE', offset: [0, 0], radius: .1 } },
   } });
   let state = createBattleState(fixtureBattlefieldState([initialize({ id: 0, position: [0, 0], definition }), receiver]));
-  state = enter(state, [0]);
+  state = enter(state, 0);
   state = updateUnit(state, { ...getUnit(state, 0), skill: { ...getUnit(state, 0).skill, sp: { ...getUnit(state, 0).skill.sp, value: 40 } } });
   state = activateSkill({ ...state, tick: 0  }, unitRef(getUnit(state, 0))).state;
   state = startAction(state, unitRef(getUnit(state, 0)), attack).state;

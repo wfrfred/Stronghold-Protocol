@@ -233,7 +233,7 @@ test("onLeave reads the pre-cleanup Unit after removal and passes its changes to
       assert.equal(departure.unit.effects.values().toArray()[0].status, "ACTIVE");
       const other = getUnit(state, 1);
       state = updateUnit(state, { ...other, vitality: { ...other.vitality, hp: 77 } });
-      return enter(registerUnit(state, child), [child.id]);
+      return enter(registerUnit(state, child), child.id);
     },
   });
   const mechanism = createMechanism({

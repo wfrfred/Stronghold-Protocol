@@ -5,7 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
-import { getUnit, updateUnit } from '../../dist/core/tactical/battle/state.js';
+import { getUnit, registerUnit, updateUnit } from '../../dist/core/tactical/battle/state.js';
+import { instantiateUnitPlacement } from '../../dist/core/tactical/battle/creation/placement.js';
+import { enter } from '../../dist/core/tactical/battle/execution/unit.js';
+import { advancePredefined } from '../../dist/core/tactical/battle/steps/predefined.js';
+import { resolveScheduleUnits } from '../../dist/core/tactical/battle/schedule/runtime.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createInput as createRouteDefinition } from '../../dist/core/tactical/battle/creation/route.js';
 
@@ -37,21 +41,110 @@ const markEntered = (trace, id) => ({
   },
 });
 
-test('initial entry callbacks see the whole registered batch and preceding callbacks', () => {
+test('initial Units finish entry before allocating and registering the next Unit', () => {
   const trace = [];
-  const first = { ...markEntered(trace, 'first'), onEnter(state, unitId) {
-    assert.equal(getUnit(state, 1).vitality.hp, 100);
-    const other = getUnit(state, 1);
-    return updateUnit(state, { ...other, vitality: { ...other.vitality, hp: 60 } });
+  const firstEntry = markEntered(trace, 'first');
+  const first = { ...firstEntry, onEnter(state, unitId) {
+    assert.deepEqual([...state.battlefield.units.keys()], [unitId]);
+    assert.equal(state.execution.nextUnitId, 1);
+    state = firstEntry.onEnter(state, unitId);
+    const child = instantiateUnitPlacement(state, {
+      definition: markEntered(trace, 'child'), position: [2, 0],
+    });
+    return enter(registerUnit(child.state, child.value), child.value.id);
   } };
-  const second = markEntered(trace, 'second');
+  const secondEntry = markEntered(trace, 'second');
+  const second = { ...secondEntry, onEnter(state, unitId) {
+    assert.equal(unitId, 2);
+    assert.equal(getUnit(state, 0).vitality.hp, 75);
+    assert.equal(getUnit(state, 1).definition.id, 'child');
+    assert.equal(getUnit(state, 1).vitality.hp, 75);
+    return secondEntry.onEnter(state, unitId);
+  } };
   const runtime = new BattleRuntime(input({ initialUnits: [
     { definition: first, position: [0, 0] },
     { definition: second, position: [1, 0] },
   ] }));
-  assert.deepEqual(trace, [['second', 1, 60]]);
-  assert.equal(runtime.snapshot().units[1].vitality.hp, 75);
+  assert.deepEqual(trace, [['first', 0, 100], ['child', 1, 100], ['second', 2, 100]]);
+  assert.equal(runtime.snapshot().execution.nextUnitId, 3);
+  assert.deepEqual(runtime.snapshot().units.map(unit => unit.vitality.hp), [75, 75, 75]);
   assert.equal(second.vitality.maxHp, 100);
+});
+
+test('initial predefined entry uses the same sequential bindings as later appearances', () => {
+  const trace = [];
+  const definitions = [{
+    id: 0, alias: null, initiallyPresent: true,
+    creation: { type: 'UNIT', position: [0, 0], definition: {
+      id: 'first-predefined',
+      onEnter(state, id) {
+        trace.push(id);
+        assert.equal(state.execution.nextUnitId, 1);
+        assert.deepEqual(state.predefinedPresence, [
+          { definitionId: 0, source: { type: 'UNIT', unitId: id } },
+        ]);
+        return advancePredefined(state, definitions, [
+          { type: 'APPEAR_PREDEFINED', definitionId: 1 },
+        ]);
+      },
+    } },
+  }, {
+    id: 1, alias: null, initiallyPresent: true,
+    creation: { type: 'UNIT', position: [1, 0], definition: {
+      id: 'second-predefined', onEnter(state, id) { trace.push(id); return state; },
+    } },
+  }];
+  const runtime = new BattleRuntime(input({ predefines: definitions }));
+  assert.deepEqual(trace, [0, 1]);
+  assert.equal(runtime.snapshot().execution.nextUnitId, 2);
+  assert.deepEqual(runtime.snapshot().predefinedPresence, [
+    { definitionId: 0, source: { type: 'UNIT', unitId: 0 } },
+    { definitionId: 1, source: { type: 'UNIT', unitId: 1 } },
+  ]);
+});
+
+test('same-tick spawns expose only completed entries and preserve nested allocations and schedule updates', () => {
+  const trace = [];
+  const first = {
+    id: 'first-spawn',
+    onEnter(state, id) {
+      trace.push(id);
+      assert.deepEqual([...state.battlefield.units.keys()], [0]);
+      assert.equal(state.schedule.spawnedCount, 1);
+      assert.equal(state.schedule.pendingSpawnCount, 1);
+      assert.deepEqual(state.schedule.managedFinalUnitIds, [0]);
+      assert.deepEqual(state.events.map(event => event.unitId), [0]);
+      const child = instantiateUnitPlacement(state, {
+        definition: { id: 'spawn-child' }, position: [2, 0],
+      });
+      state = enter(registerUnit(child.state, child.value), child.value.id);
+      return { ...state, schedule: resolveScheduleUnits(state.schedule, [id]) };
+    },
+  };
+  const second = {
+    id: 'second-spawn',
+    onEnter(state, id) {
+      trace.push(id);
+      assert.equal(id, 2);
+      assert.equal(getUnit(state, 1).definition.id, 'spawn-child');
+      assert.equal(state.schedule.spawnedCount, 2);
+      assert.equal(state.schedule.pendingSpawnCount, 0);
+      assert.deepEqual(state.schedule.managedFinalUnitIds, [2]);
+      assert.deepEqual(state.events.map(event => event.unitId), [0, 2]);
+      return state;
+    },
+  };
+  const runtime = new BattleRuntime(input({
+    schedule: { type: 'TIMELINE', spawns: [spawn(first), spawn(second)] },
+  }));
+  const before = runtime.snapshot();
+  const step = runtime.step();
+  assert.deepEqual(trace, [0, 2]);
+  assert.deepEqual(step.events.filter(event => event.type === 'ENEMY_SPAWNED').map(event => event.unitId), [0, 2]);
+  assert.equal(runtime.snapshot().execution.nextUnitId, 3);
+  assert.deepEqual(runtime.snapshot().spawning.managedFinalUnitIds, [2]);
+  assert.deepEqual(before.units, []);
+  assert.equal(before.execution.nextUnitId, 0);
 });
 
 test('scheduled Units enter after spawning and keep immutable old snapshots', () => {

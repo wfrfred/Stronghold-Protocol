@@ -18,18 +18,16 @@ import {
 } from "../state.js";
 import { refundUnit, recycleUnitCard } from "../deployment/deployment.js";
 
-export function enter(state: BattleState, unitIds: readonly Id[]): BattleState {
-    for (const unitId of unitIds) {
-        let unit = getUnit(state, unitId);
+export function enter(state: BattleState, unitId: Id): BattleState {
+    let unit = getUnit(state, unitId);
 
-        if (unit?.lifecycle === "PRESENT" && hasSkill(unit)) {
-            state = skills.enter(state, units.ref(unit));
-            unit = getUnit(state, unitId);
-        }
+    if (unit?.lifecycle === "PRESENT" && hasSkill(unit)) {
+        state = skills.enter(state, units.ref(unit));
+        unit = getUnit(state, unitId);
+    }
 
-        if (unit?.lifecycle === "PRESENT" && unit.definition.onEnter !== undefined) {
-            state = unit.definition.onEnter(state, unitId);
-        }
+    if (unit?.lifecycle === "PRESENT" && unit.definition.onEnter !== undefined) {
+        state = unit.definition.onEnter(state, unitId);
     }
 
     return state;

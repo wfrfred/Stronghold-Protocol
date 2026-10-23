@@ -258,8 +258,8 @@ export function recordScheduleSpawns(
     spawns: readonly ScheduleSpawn[],
     unitIds: readonly Id[],
 ): SpawnScheduleExecution {
-    if (spawns.length !== unitIds.length || spawns.length !== previous.pendingSpawnCount) {
-        throw new RangeError("recorded schedule spawns must match the pending spawn batch");
+    if (spawns.length !== unitIds.length || spawns.length > previous.pendingSpawnCount) {
+        throw new RangeError("recorded schedule spawns must match available pending spawns");
     }
     if (spawns.length === 0) {
         return previous;
@@ -289,7 +289,7 @@ export function recordScheduleSpawns(
     return {
         ...previous,
         spawnedCount: addScheduleTicks(previous.spawnedCount, spawns.length),
-        pendingSpawnCount: 0,
+        pendingSpawnCount: previous.pendingSpawnCount - spawns.length,
         managedWaveUnitIds:
             newWaveUnitIds.length === 0
                 ? previous.managedWaveUnitIds

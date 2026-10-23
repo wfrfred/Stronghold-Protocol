@@ -1,7 +1,6 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import type { BattlefieldRemovalReason, BattlefieldView } from "../../battlefield/contract.js";
-import type { Mechanism, MechanismDefinition } from "../../battlefield/mechanism.js";
-import type { Unit } from "../../unit/unit.js";
+import type { MechanismDefinition } from "../../battlefield/mechanism.js";
 import {
     createUnitPlacementDefinition,
     instantiateUnitPlacement,
@@ -16,7 +15,6 @@ import {
     removeMechanism,
     updateMechanism,
     type State as BattleState,
-    type Result,
 } from "../state.js";
 
 export interface PredefinedUnitCreation extends UnitPlacementDefinition {
@@ -78,48 +76,6 @@ export function predefinedIdsForAlias(
     return definitions
         .filter((definition) => definition.alias === alias)
         .map((definition) => definition.id);
-}
-
-export function instantiatePredefinedInstances(
-    state: BattleState,
-    definitions: readonly PredefinedDefinition[],
-): Result<{ readonly units: readonly Unit[]; readonly mechanisms: readonly Mechanism[] }> {
-    const units: Unit[] = [];
-    const mechanisms: Mechanism[] = [];
-
-    for (const definition of definitions) {
-        if (
-            !definition.initiallyPresent ||
-            state.predefinedPresence.some((binding) => binding.definitionId === definition.id)
-        ) {
-            continue;
-        }
-
-        const creation = definition.creation;
-        let source: Source;
-
-        if (creation.type === "UNIT") {
-            const initialized = instantiateUnitPlacement(state, creation);
-            state = initialized.state;
-            units.push(initialized.value);
-            source = { type: "UNIT", unitId: initialized.value.id };
-        } else {
-            const initialized = instantiateMechanismPlacement(creation, state.execution);
-            state = { ...state, execution: initialized.execution };
-            mechanisms.push(initialized.mechanism);
-            source = { type: "MECHANISM", mechanismId: initialized.mechanism.id };
-        }
-
-        state = {
-            ...state,
-            predefinedPresence: [
-                ...state.predefinedPresence,
-                { definitionId: definition.id, source },
-            ],
-        };
-    }
-
-    return { state, value: { units, mechanisms } };
 }
 
 export function reconcilePredefinedPresence(
@@ -197,7 +153,7 @@ export function advancePredefined(
                 ],
             };
             state = registerUnit(state, unit);
-            state = enter(state, [unit.id]);
+            state = enter(state, unit.id);
         } else {
             const initialized = instantiateMechanismPlacement(creation, state.execution);
             state = {
