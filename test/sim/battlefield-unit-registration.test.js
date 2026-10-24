@@ -23,7 +23,7 @@ const map = () =>
         3,
         Array.from({ length: 3 }, () =>
             createTile({
-                heightType: "LOWLAND",
+                heightType: "LOWLAND", meleeBlockable: true,
                 buildableType: "ALL",
                 passableMask: "ALL",
                 playerSideMask: "ALL",

@@ -252,7 +252,7 @@ test('simdata normalises real chess, enemy, token, stage and routes', () => {
 
 const presenceBattlefield = () => createFieldState({
   map: createBattlefieldMap(1, 5, Array.from({ length: 5 }, () => ({
-    heightType: 'LOWLAND', buildableType: 'MELEE', passableMask: 'ALL',
+    heightType: 'LOWLAND', meleeBlockable: true, buildableType: 'MELEE', passableMask: 'ALL',
     playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
   }))),
 });
@@ -937,7 +937,7 @@ battleState.battlefield.projectiles.replace(projectileRef(typedProjectile), type
 });
 
 const deploymentTile = (overrides = {}) => ({
-  heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
+  heightType: 'LOWLAND', meleeBlockable: true, buildableType: 'ALL', passableMask: 'ALL',
   playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null, ...overrides,
 });
 
@@ -953,7 +953,7 @@ const deploymentUnit = (id, position, definition, claims, present = true) => {
 test('core deployment uses buildability, side and terrain independently of navigation passability', () => {
   const map = createBattlefieldMap(1, 8, [
     deploymentTile({ buildableType: 'MELEE' }),
-    deploymentTile({ buildableType: 'RANGED', heightType: 'HIGHLAND' }),
+    deploymentTile({ buildableType: 'RANGED', heightType: 'HIGHLAND', meleeBlockable: false }),
     deploymentTile({ passableMask: 'FLY_ONLY' }),
     deploymentTile({ buildableType: 'NONE' }),
     deploymentTile({ playerSideMask: 'SIDE_B' }),

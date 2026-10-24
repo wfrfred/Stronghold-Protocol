@@ -275,7 +275,7 @@ test('core combat: a blocked enemy exchanges attacks and death resolves the spaw
   assert.equal(first.battle.snapshot().blockingRelations.length, 0);
 });
 
-test('core combat: fence units cannot block ground enemies or attack them outside their range', () => {
+test('core combat: tile blocking is independent of passability and grants attacks outside normal range', () => {
   const spec = createLegacyCombatSpec({
     rows: 1, columns: 3, maxTicks: 2,
     operators: [{ definition: guard({
@@ -284,17 +284,19 @@ test('core combat: fence units cannot block ground enemies or attack them outsid
     enemies: [{ definition: walker({ hp: 1000, atk: 1, speed: 0, bat: 0.1 }),
       route: coreCombatRoute([0, 0], { endPosition: [0, 2], spawnOffset: [0.35, 0] }) }],
   });
-  for (const passableMask of ['FLY_ONLY', 'NONE', 'ALL', 'WALK_ONLY']) {
-    const map = createBattlefieldMap(1, 3, spec.map.tiles.map((tile, index) =>
-      index === 1 ? createTile({ ...tile, passableMask }) : tile));
-    const battle = new BattleRuntime({ ...spec, map });
-    const blocksGround = passableMask === 'ALL' || passableMask === 'WALK_ONLY';
-    for (let tick = 0; tick < 2; tick++) {
-      const { events } = battle.step();
-      assert.deepEqual(battle.snapshot().blockingRelations, blocksGround
-        ? [{ blockerUnitId: 0, blockedUnitId: 1 }] : [], passableMask);
-      assert.deepEqual(events.filter(event => event.type === 'ACTION').map(event => event.sourceUnitId),
-        blocksGround && tick === 1 ? [0, 1] : [], passableMask);
+  for (const meleeBlockable of [false, true]) {
+    for (const passableMask of ['FLY_ONLY', 'NONE', 'ALL', 'WALK_ONLY']) {
+      const map = createBattlefieldMap(1, 3, spec.map.tiles.map((tile, index) =>
+        index === 1 ? createTile({ ...tile, meleeBlockable, passableMask }) : tile));
+      const battle = new BattleRuntime({ ...spec, map });
+      const context = `meleeBlockable=${meleeBlockable}, passableMask=${passableMask}`;
+      for (let tick = 0; tick < 2; tick++) {
+        const { events } = battle.step();
+        assert.deepEqual(battle.snapshot().blockingRelations, meleeBlockable
+          ? [{ blockerUnitId: 0, blockedUnitId: 1 }] : [], context);
+        assert.deepEqual(events.filter(event => event.type === 'ACTION').map(event => event.sourceUnitId),
+          meleeBlockable && tick === 1 ? [0, 1] : [], context);
+      }
     }
   }
 });

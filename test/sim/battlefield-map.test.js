@@ -50,7 +50,7 @@ map.markers[0]!.position[0] = 1;
 
 test('battlefield versions share a map whose nested data is isolated from caller mutations', () => {
   const tile = {
-    heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
+    heightType: 'LOWLAND', meleeBlockable: true, buildableType: 'ALL', passableMask: 'ALL',
     playerSideMask: 'ALL', terrain: 'NORMAL',
     mechanism: { type: 'INFECTION', params: {
       damagePerTick: 10, attackBonusRatio: 0.2, attackSpeedBonus: 20, activeUntilTick: 60,

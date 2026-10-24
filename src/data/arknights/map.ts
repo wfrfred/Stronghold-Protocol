@@ -148,6 +148,17 @@ function parseTile(
 
     const blackboard = tileBlackboard(source.blackboard);
     const consumed = new Set<string>();
+    const heightType = string(source.heightType, "tile height type") as HeightType;
+    const blockable = blackboard.find((entry) => entry.key === "tile_blockable");
+
+    if (blockable !== undefined) {
+        if (blockable.valueStr !== null) {
+            throw new TypeError("tile_blockable requires a numeric blackboard value");
+        }
+
+        consumed.add(blockable.key);
+    }
+
     let mechanism: TileMechanism | null = null;
 
     switch (tileKey) {
@@ -209,7 +220,8 @@ function parseTile(
     }
 
     const tile: Tile = {
-        heightType: string(source.heightType, "tile height type") as HeightType,
+        heightType,
+        meleeBlockable: blockable === undefined ? heightType === "LOWLAND" : blockable.value !== 0,
         buildableType: string(source.buildableType, "tile buildable type") as BuildableType,
         passableMask: string(source.passableMask, "tile passable mask") as PassableMask,
         playerSideMask: string(source.playerSideMask, "tile player side mask") as PlayerSideMask,

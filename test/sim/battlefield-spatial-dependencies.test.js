@@ -20,7 +20,7 @@ function projectionFacts(state) {
 
 function projectionHarness() {
   const map = createBattlefieldMap(1, 5, Array.from({ length: 5 }, () => createTile({
-    heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
+    heightType: 'LOWLAND', meleeBlockable: true, buildableType: 'ALL', passableMask: 'ALL',
     playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
   })));
   const navigation = createNavigation({

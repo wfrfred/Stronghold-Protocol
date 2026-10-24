@@ -13,7 +13,7 @@ import { finishBattleEvents } from '../../dist/core/tactical/battle/events.js';
 
 const initial = () => create({
   map: createBattlefieldMap(1, 3, Array.from({ length: 3 }, () => createTile({
-    heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
+    heightType: 'LOWLAND', meleeBlockable: true, buildableType: 'ALL', passableMask: 'ALL',
     playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
   }))),
 });

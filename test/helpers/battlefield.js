@@ -4,7 +4,7 @@ import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/m
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
 
 const tile = createTile({
-    heightType: "LOWLAND",
+    heightType: "LOWLAND", meleeBlockable: true,
     buildableType: "ALL",
     passableMask: "ALL",
     playerSideMask: "ALL",

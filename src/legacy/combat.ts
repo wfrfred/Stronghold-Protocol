@@ -355,6 +355,7 @@ function combatMap(options: LegacyCombatOptions): BattlefieldMap {
 
     const tile = createTile({
         heightType: "LOWLAND",
+        meleeBlockable: true,
         buildableType: "ALL",
         passableMask: "ALL",
         playerSideMask: "ALL",

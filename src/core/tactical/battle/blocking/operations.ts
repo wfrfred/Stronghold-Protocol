@@ -60,7 +60,7 @@ function canSearch(battle: BattleState, unit: Unit & Blocker): boolean {
 
     const tile = BattlefieldMap.get(battle.battlefield.map, World.toTile(unit.position));
 
-    return tile?.passableMask === "ALL" || tile?.passableMask === "WALK_ONLY";
+    return tile?.meleeBlockable === true;
 }
 
 function canRetain(

@@ -25,7 +25,7 @@ const route = overrides => ({
 
 function battle(rows = 5, columns = 3, cells = Array.from({ length: rows * columns }, () => cell())) {
     const tile = createTile({
-        heightType: "LOWLAND", buildableType: "ALL", passableMask: "ALL",
+        heightType: "LOWLAND", meleeBlockable: true, buildableType: "ALL", passableMask: "ALL",
         playerSideMask: "ALL", terrain: "NORMAL", mechanism: null,
     });
     const state = createBattleState(create({ map: createBattlefieldMap(rows, columns, Array(rows * columns).fill(tile)) }));

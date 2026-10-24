@@ -29,7 +29,7 @@ const rawEnemy = id => fixture.enemies.find(entry => entry.Key === id);
 const profile = (id, level = 0, overwrittenData) => prepare(rawEnemy(id), { level, overwrittenData });
 
 function emptyBattle() {
-  const tile = { heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL', playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null };
+  const tile = { heightType: 'LOWLAND', meleeBlockable: true, buildableType: 'ALL', passableMask: 'ALL', playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null };
   return createBattleState(createBattlefield({ map: createBattlefieldMap(5, 5, Array.from({ length: 25 }, () => tile)) }));
 }
 

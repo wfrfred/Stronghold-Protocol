@@ -2000,7 +2000,7 @@ test('core same-position alternative disappearance and appearance replace an exi
   source.step();
   const [operator, enemy] = source.snapshot().units;
   const map = createBattlefieldMap(1, 5, Array.from({ length: 5 }, () => ({
-    heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
+    heightType: 'LOWLAND', meleeBlockable: true, buildableType: 'ALL', passableMask: 'ALL',
     playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
   })));
   const runtime = new BattleRuntime({
@@ -2053,7 +2053,7 @@ function deploymentBattleInput(overrides = {}, cards = []) {
     ...withTimelineSpawns(source, [{ ...source.schedule.spawns[0], tick: 99 }]),
     deployment: { definition: { initialDp: 99, maxDp: 99, dpRecoveryTicks: null, slotLimit: null }, cards },
     map: createBattlefieldMap(1, 6, Array.from({ length: 6 }, () => ({
-      heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
+      heightType: 'LOWLAND', meleeBlockable: true, buildableType: 'ALL', passableMask: 'ALL',
       playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
     }))),
     ...overrides,

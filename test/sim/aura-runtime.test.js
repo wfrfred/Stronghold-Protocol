@@ -21,7 +21,7 @@ import {
 } from "../helpers/aura.js";
 
 const tile = createTile({
-    heightType: "LOWLAND",
+    heightType: "LOWLAND", meleeBlockable: true,
     buildableType: "ALL",
     passableMask: "ALL",
     playerSideMask: "ALL",

@@ -431,9 +431,10 @@ test('core selective projection retains untouched collections, indexes and route
   assert.equal(previous.units.get(1).vitality.hp, 100);
 });
 
-test('complete battle updates release ground blocking when a blocker enters an impassable tile', () => {
-  const map = createBattlefieldMap(1, 4, ['ALL', 'FLY_ONLY', 'WALK_ONLY', 'NONE']
-    .map(passableMask => coreGround({ passableMask })));
+test('complete battle updates retain or release blocking from the tile blocking fact independently of passability', () => {
+  const passableMasks = ['ALL', 'FLY_ONLY', 'WALK_ONLY', 'NONE'];
+  const map = createBattlefieldMap(1, 8, [true, false].flatMap(meleeBlockable =>
+    passableMasks.map(passableMask => coreGround({ meleeBlockable, passableMask }))));
   const blocker = projectionUnit(10, [0, 0], {
     vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ALLY' }, blocker: { capacity: 1, geometry: { radius: 1 } },
   });
@@ -445,10 +446,12 @@ test('complete battle updates release ground blocking when a blocker enters an i
   const acquired = blocking.search(initial, units.ref(blocker));
   const entry = acquired.battlefield.units.get(10).blocker.blocked[0];
   assert.deepEqual(blockedIds(acquired), [11]);
-  const passable = updateUnit(acquired, { ...acquired.battlefield.units.get(10), position: [2, 0] });
-  assert.equal(passable.battlefield.units.get(10).blocker.blocked[0], entry);
+  for (let column = 0; column < passableMasks.length; column++) {
+    const retained = updateUnit(acquired, { ...acquired.battlefield.units.get(10), position: [column, 0] });
+    assert.equal(retained.battlefield.units.get(10).blocker.blocked[0], entry, passableMasks[column]);
+  }
 
-  for (const position of [[1, 0], [3, 0], [-1, 0]]) {
+  for (const position of [[4, 0], [5, 0], [6, 0], [7, 0], [-1, 0]]) {
     const changed = updateUnit(acquired, { ...acquired.battlefield.units.get(10), position });
     assert.deepEqual(blockedIds(changed), []);
     assert.deepEqual(blockedIds(acquired), [11]);
@@ -553,7 +556,7 @@ test('core selective and full projection reject invalid final references and cla
 });
 
 const coreGround = (overrides = {}) => ({
-  heightType: 'LOWLAND', buildableType: 'MELEE', passableMask: 'ALL', playerSideMask: 'ALL',
+  heightType: 'LOWLAND', meleeBlockable: true, buildableType: 'MELEE', passableMask: 'ALL', playerSideMask: 'ALL',
   terrain: 'NORMAL', mechanism: null, ...overrides,
 });
 const rawTile = (tileKey, overrides = {}) => ({

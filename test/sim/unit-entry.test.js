@@ -15,7 +15,7 @@ import { createInput as createRouteDefinition } from '../../dist/core/tactical/b
 
 
 const map = createBattlefieldMap(2, 4, Array.from({ length: 8 }, () => ({
-  heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
+  heightType: 'LOWLAND', meleeBlockable: true, buildableType: 'ALL', passableMask: 'ALL',
   playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
 })));
 const route = createRouteDefinition({

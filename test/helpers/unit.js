@@ -6,7 +6,7 @@ import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 
 const tile = createTile({
-    heightType: "LOWLAND", buildableType: "ALL", passableMask: "ALL",
+    heightType: "LOWLAND", meleeBlockable: true, buildableType: "ALL", passableMask: "ALL",
     playerSideMask: "ALL", terrain: "NORMAL", mechanism: null,
 });
 const map = createBattlefieldMap(1, 32, Array(32).fill(tile));

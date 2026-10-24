@@ -19,7 +19,7 @@ import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
 import { fixtureBattlefieldState } from "../helpers/battlefield.js";
 
 const tile = createTile({
-    heightType: "LOWLAND", buildableType: "ALL", passableMask: "ALL",
+    heightType: "LOWLAND", meleeBlockable: true, buildableType: "ALL", passableMask: "ALL",
     playerSideMask: "ALL", terrain: "NORMAL", mechanism: null,
 });
 const map = createBattlefieldMap(1, 8, Array(8).fill(tile));

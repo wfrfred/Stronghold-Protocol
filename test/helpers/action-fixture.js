@@ -13,7 +13,7 @@ import { create as createAttack } from "../../dist/content/tactical/actions/atta
 export const geometry = [{ type: "CIRCLE", offset: [0, 0], radius: 10 }];
 const hit = { type: "CIRCLE", offset: [0, 0], radius: 0.1 };
 const tile = createTile({
-    heightType: "LOWLAND",
+    heightType: "LOWLAND", meleeBlockable: true,
     buildableType: "ALL",
     passableMask: "ALL",
     playerSideMask: "ALL",

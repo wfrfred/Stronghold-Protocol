@@ -54,6 +54,7 @@ export type TileMechanism =
 
 export interface Tile {
     readonly heightType: HeightType;
+    readonly meleeBlockable: boolean;
     readonly buildableType: BuildableType;
     readonly passableMask: PassableMask;
     readonly playerSideMask: PlayerSideMask;
@@ -166,6 +167,7 @@ export function createTile(tile: Tile): Tile {
 
     return Object.freeze({
         heightType: tile.heightType,
+        meleeBlockable: tile.meleeBlockable,
         buildableType: tile.buildableType,
         passableMask: tile.passableMask,
         playerSideMask: tile.playerSideMask,

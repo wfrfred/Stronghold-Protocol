@@ -92,7 +92,7 @@ const placement = (id, column) => ({
 
 function fixture({ spawnTick = 100 } = {}) {
     const tile = {
-        heightType: "LOWLAND",
+        heightType: "LOWLAND", meleeBlockable: true,
         buildableType: "ALL",
         passableMask: "ALL",
         playerSideMask: "ALL",

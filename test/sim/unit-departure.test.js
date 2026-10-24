@@ -140,7 +140,7 @@ for (const domain of ["deployment", "predefined"]) {
             1,
             2,
             Array.from({ length: 2 }, () => ({
-                heightType: "LOWLAND",
+                heightType: "LOWLAND", meleeBlockable: true,
                 buildableType: "ALL",
                 passableMask: "ALL",
                 playerSideMask: "ALL",

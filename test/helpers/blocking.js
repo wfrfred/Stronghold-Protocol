@@ -15,7 +15,7 @@ import * as attribute from "../../dist/core/tactical/unit/contribution/attribute
 
 export function fixture(units = [], { rows = 3, columns = 12 } = {}) {
     const tile = createTile({
-        heightType: "LOWLAND", buildableType: "ALL", passableMask: "ALL",
+        heightType: "LOWLAND", meleeBlockable: true, buildableType: "ALL", passableMask: "ALL",
         playerSideMask: "ALL", terrain: "NORMAL", mechanism: null,
     });
     const map = createBattlefieldMap(rows, columns, Array(rows * columns).fill(tile));
