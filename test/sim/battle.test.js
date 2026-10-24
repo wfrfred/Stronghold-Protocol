@@ -40,7 +40,7 @@ import { parsePredefinedDefinition } from '../../dist/data/arknights/predefined.
 import { compileSpawnSchedule } from '../../dist/data/arknights/schedule.js';
 import { compileLevelMovementFragment } from '../../dist/data/arknights/movement-fragment.js';
 import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
-import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
+import { createLegacyCombatBattle } from '../helpers/legacy-combat.js';
 import { createDefinition as createDeployableDefinition } from '../../dist/core/tactical/unit/capability/deployable/capability.js';
 import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
 import { createPredefinedDefinition } from '../../dist/core/tactical/battle/steps/predefined.js';

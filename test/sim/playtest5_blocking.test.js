@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { makeBattle, chessRec, enemyRec, checkInvariants } from '../helpers/battleHarness.js';
 import { BLOCK_RADIUS } from '../../server/sim/constants.js';
 import { getDefaultSource } from '../../server/sim/simdata.js';
-import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
+import { createLegacyCombatBattle } from '../helpers/legacy-combat.js';
 import { createInput as createRouteDefinition } from '../../dist/core/tactical/battle/creation/route.js';
 import { resolveVolume } from '../../dist/core/tactical/unit/capability/blocking/blockable.js';
 

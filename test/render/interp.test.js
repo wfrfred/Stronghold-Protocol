@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { SnapshotBuffer, normalizeSnapshot, isCosmeticEvent, frameTime } from '../../public/js/render/interp.js';
 import { chessRec, enemyRec } from '../helpers/battleHarness.js';
 import { createInput as createRouteDefinition } from '../../dist/core/tactical/battle/creation/route.js';
-import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
+import { createLegacyCombatBattle } from '../helpers/legacy-combat.js';
 import { TacticalDemoPresentation } from '../../dist/legacy/tactical-demo-presentation.js';
 
 const fxFormOf = (e) => (e && e[0] === 'fx' && e[4] && Object.hasOwn(e[4], 'form') ? e[4].form : undefined);

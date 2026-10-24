@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { Grid } from '../../server/sim/grid.js';
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { GEO } from '../../shared/constants.js';
-import { flowFieldForGrid } from '../../dist/legacy/navigation.js';
+import { flowFieldForGrid } from '../helpers/legacy-navigation.js';
 import { Map as NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
 import { build } from '../../dist/core/tactical/battlefield/navigation/field.js';
 

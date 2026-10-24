@@ -34,7 +34,7 @@ import { createDefinition as createTileBindingDefinition } from '../../dist/core
 import * as blockable from '../../dist/core/tactical/unit/capability/blocking/blockable.js';
 import { setRule as setBlockerRule } from '../../dist/core/tactical/unit/capability/blocking/blocker.js';
 import { Grid, OBSTACLE_COST, bresenhamTiles } from '../../server/sim/grid.js';
-import { flowFieldForGrid, navigationMapFromGrid, waypointsForGrid } from '../../dist/legacy/navigation.js';
+import { flowFieldForGrid, navigationMapFromGrid, waypointsForGrid } from '../helpers/legacy-navigation.js';
 import { build } from '../../dist/core/tactical/battlefield/navigation/field.js';
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { makeBattle, flatStage, enemyRec } from '../helpers/battleHarness.js';

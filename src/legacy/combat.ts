@@ -5,7 +5,6 @@ import * as filters from "../core/tactical/battle/targeting/filter.js";
 import * as compare from "../core/tactical/battle/targeting/compare.js";
 import { first } from "../core/tactical/battle/targeting/selector.js";
 import { assertFiniteNumber, assertPositiveSafeInteger } from "../core/common/assert.js";
-import { BattleRuntime } from "../core/tactical/battle/runtime.js";
 import type { Input } from "../core/tactical/battle/contract.js";
 import { createBattlefieldMap, type BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
 import { createTile } from "../core/tactical/battlefield/map/tile.js";
@@ -394,8 +393,4 @@ export function createLegacyCombatSpec(options: LegacyCombatOptions) {
         routeMoveMultiplier: 1,
         rngState: options.seed ?? 1,
     } satisfies Input;
-}
-
-export function createLegacyCombatBattle(options: LegacyCombatOptions): BattleRuntime {
-    return new BattleRuntime(createLegacyCombatSpec(options));
 }
