@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { battle, unit, actionDefinition } from "../helpers/action-fixture.js";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
-import { maintain } from "../../dist/core/tactical/battlefield/storage/state.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { start } from "../../dist/core/tactical/unit/action/operations.js";
 
@@ -18,17 +17,13 @@ test("action event order: lethal output settles support loss before action compl
                 advancedBuildableMask: null,
             },
         }),
-        occupancy: { claims: [{ position: [0, 1], slot: "SUPPORT", type: "PRESENT" }] },
+        occupancy: { registration: { tile: [0, 1], slot: "SUPPORT" } },
     };
     const recipient = {
         ...unit(2),
-        occupancy: { claims: [{ position: [0, 1], slot: "DEPLOYMENT", type: "PRESENT" }] },
+        occupancy: { registration: { tile: [0, 1], slot: "OCCUPANT" } },
     };
-    let state = battle(source, support, recipient);
-    state = {
-        ...state,
-        battlefield: maintain(state.battlefield, { ...state.battlefield, supportRelations: [{ supportedUnitId: 2, supportUnitId: 1 }] }),
-    };
+    const state = battle(source, support, recipient);
     const result = start(state, unitRef(getUnit(state, 0)), definition);
     const types = result.state.events.map((event) => event.type);
     assert.ok(types.indexOf("DAMAGE") < types.indexOf("SUPPORT_LOST"));

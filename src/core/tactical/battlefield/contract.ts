@@ -1,9 +1,8 @@
 import type { TilePosition } from "../geometry/coordinate.js";
 import type { State as NavigationState } from "./navigation/state.js";
 import type { Unit, Id } from "../unit/unit.js";
-import type { OccupancySlot } from "../unit/capability/occupancy/capability.js";
+import type { Slot } from "../unit/capability/occupancy/capability.js";
 import type { BattlefieldMap } from "./map/map.js";
-import type { SupportRelation } from "./support/relations.js";
 import type { ProjectileView } from "./projectile/projectile.js";
 import type { Index } from "./storage/effect-lifetimes.js";
 
@@ -18,6 +17,11 @@ export interface BlockingRelation {
     readonly blockedUnitId: Id;
 }
 
+export interface SupportRelation {
+    readonly supportedUnitId: Id;
+    readonly supportUnitId: Id;
+}
+
 export interface BattlefieldView<U extends Unit = Unit> extends ProjectileView {
     readonly map: BattlefieldMap;
     readonly navigation: NavigationState;
@@ -30,7 +34,7 @@ export interface BattlefieldView<U extends Unit = Unit> extends ProjectileView {
     blockerOf(unitId: Id): Id | undefined;
     blockedBy(unitId: Id): readonly Id[];
     blockingUsedCapacity(unitId: Id): number;
-    occupancyAt(position: TilePosition, slot: OccupancySlot): readonly Id[];
+    occupancyAt(position: TilePosition, slot: Slot): readonly Id[];
     supportOf(unitId: Id): Id | undefined;
     supportedBy(unitId: Id): readonly Id[];
 }

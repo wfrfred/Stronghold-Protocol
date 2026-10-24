@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { create as createFieldState, addUnits, replaceUnits } from '../../dist/core/tactical/battlefield/state.js';
+import { create as createFieldState, addUnit, replaceUnit } from '../../dist/core/tactical/battlefield/state.js';
 import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
@@ -97,7 +97,7 @@ const definition = () => ({
 test("battlefield registration retains initialized capabilities and shared definitions", () => {
     let runtime = createFieldState({ map: map() });
     const unit = initialize({ id: 1, definition: definition(), position: [0, 0] });
-    runtime = addUnits(runtime, [unit]);
+    runtime = addUnit(runtime, unit);
     assert.equal(viewBattlefield(runtime).getUnit(1), unit);
     assert.deepEqual(
         viewBattlefield(runtime)
@@ -111,18 +111,18 @@ test("battlefield replacement preserves configured capability composition on upd
     let runtime = createFieldState({ map: map() });
     const unit = initialize({ id: 1, definition: definition(), position: [0, 0] });
     const bare = initialize({ id: 2, definition: { id: "bare" }, position: [2, 0] });
-    runtime = addUnits(runtime, [unit, bare]);
+    runtime = [unit, bare].reduce((field, unit) => addUnit(field, unit), runtime);
     const updated = {
         ...unit,
         action: { ...unit.action, states: unit.action.states.read("normal", current => unit.action.states.replace(current.definition, { ...current, cooldown: { periodTicks: 3, readyAtTick: 7 } })) },
         spatialPresence: { present: false },
-        occupancy: { claims: [] },
+        occupancy: { registration: null },
     };
-    runtime = replaceUnits(runtime, [updated]);
+    runtime = replaceUnit(runtime, updated);
     assert.deepEqual(viewBattlefield(runtime).getUnit(1).action, updated.action);
     assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 0]), []);
-    const restored = { ...updated, spatialPresence: { present: true }, occupancy: { claims: [] } };
-    runtime = replaceUnits(runtime, [restored]);
+    const restored = { ...updated, spatialPresence: { present: true }, occupancy: { registration: null } };
+    runtime = replaceUnit(runtime, restored);
     assert.deepEqual(
         viewBattlefield(runtime)
             .unitsAt([0, 0])

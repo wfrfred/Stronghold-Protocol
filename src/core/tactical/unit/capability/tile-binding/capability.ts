@@ -1,11 +1,24 @@
 import type { BuildableType, HeightType } from "../../../battlefield/map/tile.js";
 import type { Unit, Definition as UnitDefinition } from "../../unit.js";
 import type { State as BattleState, Result } from "../../../battle/state.js";
+import type { Ref } from "../../../../common/ref.js";
+import type { TilePosition } from "../../../geometry/coordinate.js";
+import type { Occupancy } from "../occupancy/capability.js";
+
+export interface SupportLost {
+    readonly tile: TilePosition;
+    readonly occupant: Ref<Unit & Occupancy>;
+}
 
 export interface Definition {
     readonly heightType: HeightType | null;
     readonly buildableType: BuildableType;
     readonly advancedBuildableMask: number | null;
+    readonly onSupportLost?: (
+        battle: BattleState,
+        self: Unit & Occupancy & TileBinding,
+        loss: SupportLost,
+    ) => BattleState;
 }
 
 export type State = Readonly<Record<string, never>>;
@@ -48,8 +61,7 @@ export function createDefinition(
     }
 
     return Object.freeze({
-        heightType: definition.heightType,
-        buildableType: definition.buildableType,
+        ...definition,
         advancedBuildableMask,
     });
 }

@@ -24,7 +24,7 @@ test("Unit initialization pairs every declared capability, including empty defin
     assert.equal(unit.definition, definition);
     assert.deepEqual(unit.targetable, { restrictions: [] });
     assert.deepEqual(unit.spatialPresence, { present: true });
-    assert.deepEqual(unit.occupancy, { claims: [] });
+    assert.deepEqual(unit.occupancy, { registration: null });
     assert.deepEqual(unit.tileBinding, {});
     assert.equal(unit.vitality.hp, 100);
     assert.equal(getUnit(battle, unit.id), undefined);
@@ -93,7 +93,7 @@ test("generic Unit initialization cannot inject prepared states or override the 
     const definition = { id: "no-prepared-state", vitality: { maxHp: 100, defense: 0, resistance: 0 }, elemental: elementalDefinition({ maxEp: 1000, bursts }) };
     const result = initialize(battle, {
         id: 1, definition, position: [0, 0], tick: 900,
-        states: { vitality: { hp: 1 }, occupancy: { claims: [{ position: [0, 0], slot: "DEPLOYMENT", type: "PRESENT" }] } },
+        states: { vitality: { hp: 1 }, occupancy: { registration: { tile: [0, 0], slot: "OCCUPANT" } } },
     });
     assert.equal(result.value.vitality.hp, 100);
     assert.equal(result.value.elemental.lastAdvancedTick, 19);

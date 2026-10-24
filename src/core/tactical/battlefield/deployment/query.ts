@@ -1,24 +1,20 @@
 import type { TilePosition } from "../../geometry/coordinate.js";
 import type { Definition as DeployableDefinition } from "../../unit/capability/deployable/capability.js";
 import { hasTileBinding } from "../../unit/capability/tile-binding/capability.js";
-import { hasOccupancy, type OccupancySlot } from "../../unit/capability/occupancy/capability.js";
+import type { Slot } from "../../unit/capability/occupancy/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
-import type { Unit, Id } from "../../unit/unit.js";
+import type { Id } from "../../unit/unit.js";
 import { BattlefieldMap } from "../map/map.js";
 import type { BuildableType } from "../map/tile.js";
-
-export interface DeploymentView {
-    readonly map: BattlefieldMap;
-    getUnit(id: Id): Unit | undefined;
-    occupancyAt(position: TilePosition, slot: OccupancySlot): readonly Id[];
-}
+import { at } from "../occupancy.js";
+import type { State as BattlefieldState } from "../state.js";
 
 export interface DeploymentRequest {
     readonly profile: DeployableDefinition;
     readonly tile: TilePosition;
     readonly playerSide: "SIDE_A" | "SIDE_B";
     readonly relocatingUnitId?: Id;
-    readonly slot?: OccupancySlot;
+    readonly slot?: Slot;
 }
 
 export type DeploymentDecision =
@@ -37,10 +33,10 @@ const BUILDABLE_MASK: Readonly<Record<BuildableType, number>> = {
 };
 
 export function evaluateDeployment(
-    view: DeploymentView,
+    field: BattlefieldState,
     request: DeploymentRequest,
 ): DeploymentDecision {
-    const tile = BattlefieldMap.get(view.map, request.tile);
+    const tile = BattlefieldMap.get(field.map, request.tile);
 
     if (tile === undefined) {
         return { type: "DENIED", reason: "OUTSIDE_MAP" };
@@ -49,14 +45,20 @@ export function evaluateDeployment(
         return { type: "DENIED", reason: "PLAYER_SIDE" };
     }
 
-    const slot = request.slot ?? "DEPLOYMENT";
-    const occupied = (claimSlot: OccupancySlot) =>
-        view.occupancyAt(request.tile, claimSlot).filter((id) => id !== request.relocatingUnitId);
+    const slot = request.slot ?? "OCCUPANT";
+    const occupancy = at(field, request.tile);
 
-    if (occupied(slot).length > 0) {
+    const registered = (registrationSlot: Slot) => {
+        const reference =
+            registrationSlot === "OCCUPANT" ? occupancy?.occupant : occupancy?.support;
+
+        return reference?.id === request.relocatingUnitId ? null : (reference ?? null);
+    };
+
+    if (registered(slot) !== null) {
         return { type: "DENIED", reason: "OCCUPIED" };
     }
-    if (slot === "SUPPORT" && occupied("DEPLOYMENT").length > 0) {
+    if (slot === "SUPPORT" && registered("OCCUPANT") !== null) {
         return { type: "DENIED", reason: "OCCUPIED" };
     }
 
@@ -64,27 +66,16 @@ export function evaluateDeployment(
     let advancedBuildableMask = tile.advancedBuildableMask ?? 0;
     let supportUnitId: Id | null = null;
 
-    if (slot === "DEPLOYMENT") {
-        const providers = occupied("SUPPORT");
+    if (slot === "OCCUPANT") {
+        const reference = registered("SUPPORT");
 
-        if (providers.length > 1) {
-            return { type: "DENIED", reason: "OCCUPIED" };
-        }
-        if (providers.length === 1) {
-            const provider = view.getUnit(providers[0]!);
+        if (reference !== null) {
+            const provider = field.units.get(reference.id);
 
             if (
                 provider === undefined ||
                 !isSpatiallyPresent(provider) ||
-                !hasTileBinding(provider) ||
-                !hasOccupancy(provider) ||
-                !provider.occupancy.claims.some(
-                    (claim) =>
-                        claim.slot === "SUPPORT" &&
-                        claim.type === "PRESENT" &&
-                        claim.position[0] === request.tile[0] &&
-                        claim.position[1] === request.tile[1],
-                )
+                !hasTileBinding(provider)
             ) {
                 return { type: "DENIED", reason: "OCCUPIED" };
             }

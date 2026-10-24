@@ -11,24 +11,20 @@ import type { BattlefieldMap } from "../map/map.js";
 import {
     projectBattlefieldSpatial,
     projectUnitsByTile,
-    projectOccupancyBySlot,
+    deriveOccupancy,
     type BattlefieldSpatialView,
 } from "./indexes.js";
-import {
-    reconcileSupportRelations,
-    validateSupportRelations,
-    type SupportRelation,
-} from "../support/relations.js";
+import type { TileOccupancy } from "../occupancy.js";
 import { derive, project, type Index } from "./effect-lifetimes.js";
 
 export interface BattlefieldContent<U extends Unit> {
     readonly projectiles: Projectiles;
     readonly units: ReadonlyMap<Id, U>;
-    readonly supportRelations: readonly SupportRelation[];
 }
 
 export interface BattlefieldState<U extends Unit> extends BattlefieldContent<U> {
     readonly navigation: NavigationState;
+    readonly occupancy: ReadonlyMap<number, TileOccupancy>;
     readonly spatial: BattlefieldSpatialView;
     readonly effectLifetimes: Index;
 }
@@ -42,7 +38,7 @@ export function createBattlefieldState<U extends Unit>(
     return {
         units,
         projectiles: Projectiles.empty(),
-        supportRelations: [],
+        occupancy: new Map(),
         navigation,
         spatial: projectBattlefieldSpatial(map, units),
         effectLifetimes: project(units.values()),
@@ -52,17 +48,18 @@ export function createBattlefieldState<U extends Unit>(
 function finishSettlement<U extends Unit>(
     previous: FieldState<U>,
     content: BattlefieldContent<U>,
+    occupancy: ReadonlyMap<number, TileOccupancy>,
     spatial: BattlefieldSpatialView,
     effectLifetimes: Index,
 ): FieldState<U> {
     const unchanged =
         content.units === previous.units &&
         content.projectiles === previous.projectiles &&
-        content.supportRelations === previous.supportRelations &&
+        occupancy === previous.occupancy &&
         spatial === previous.spatial &&
         effectLifetimes === previous.effectLifetimes;
 
-    return unchanged ? previous : { ...previous, ...content, spatial, effectLifetimes };
+    return unchanged ? previous : { ...previous, ...content, occupancy, spatial, effectLifetimes };
 }
 
 export function maintain<U extends Unit>(
@@ -73,30 +70,19 @@ export function maintain<U extends Unit>(
     const map = previous.map;
     const dependencies = deriveBattlefieldDependencies(map, previous, content, changes);
 
-    if (content.supportRelations !== previous.supportRelations) {
-        validateSupportRelations(content.units, content.supportRelations);
-    }
-
-    const supportRelations = dependencies.support
-        ? reconcileSupportRelations(content.units, content.supportRelations)
-        : content.supportRelations;
-    let spatial = previous.spatial;
-
-    if (dependencies.unitTiles || dependencies.occupancy) {
-        spatial = {
-            ...(dependencies.unitTiles
-                ? projectUnitsByTile(map, content.units)
-                : { unitsByTile: previous.spatial.unitsByTile }),
-            ...(dependencies.occupancy
-                ? projectOccupancyBySlot(map, content.units)
-                : { occupancyBySlot: previous.spatial.occupancyBySlot }),
-        };
-    }
-
     return finishSettlement(
         previous,
-        { ...content, supportRelations },
-        spatial,
+        content,
+        dependencies.occupancy
+            ? deriveOccupancy(
+                  map,
+                  previous.units,
+                  content.units,
+                  previous.occupancy,
+                  changes.updatedUnitIds,
+              )
+            : previous.occupancy,
+        dependencies.unitTiles ? projectUnitsByTile(map, content.units) : previous.spatial,
         content.units === previous.units
             ? previous.effectLifetimes
             : derive(

@@ -9,7 +9,7 @@ import { genericKit } from '../../server/sim/content/generic.js';
 import { spawnYanyou, spawnMapChar, TOKEN_IDS, wolfShadows, tileFree, findSummonTile, summonToken } from '../../server/sim/content/tokens.js';
 import { startColdWind, kjeragColdWind, activateTurrets, terrainAt, deviceOverridesOf } from '../../server/sim/content/devices.js';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
-import { create as createFieldState, addUnits, removeUnit as removeFieldUnit } from '../../dist/core/tactical/battlefield/state.js';
+import { create as createFieldState, addUnit, removeUnit as removeFieldUnit } from '../../dist/core/tactical/battlefield/state.js';
 import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
 import { apply as applyOverlays } from '../../dist/core/tactical/battlefield/navigation/overlay.js';
 const navigationMap = (state, mode = 'WALK') => applyOverlays(state.baseline[mode], state.overlays[mode]);
@@ -1547,17 +1547,17 @@ test('core real hidden platforms grant ranged deployment support while retaining
     refund: { rate: 0.5, limit: 'BASE_COST' },
   });
   assert.equal(platform.deployable.refundAllowed, false);
-  assert.deepEqual(platform.occupancy.claims, [{ position: tile, slot: 'SUPPORT', type: 'PRESENT' }]);
+  assert.deepEqual(platform.occupancy.registration, { tile, slot: 'SUPPORT' });
   assert.equal(navigationMap(runtime.navigation).get(tile).passable, originalCell.passable);
   assert.equal(navigationMap(runtime.navigation).get(tile).cost, 1000);
   assert.equal(runtime.navigation.baseline.FLY, originalMaps.baseline.FLY);
 
   let field = createFieldState({ map: scenario.spec.map });
-  field = addUnits(field, appeared.units);
+  field = appeared.units.reduce((current, unit) => addUnit(current, unit), field);
   assert.deepEqual(viewBattlefield(field).occupancyAt(tile, 'SUPPORT'), [platform.id]);
-  assert.deepEqual(evaluateDeployment(viewBattlefield(field), { profile: { buildableType: 'RANGED', advancedBuildableMask: 1 },
+  assert.deepEqual(evaluateDeployment(field, { profile: { buildableType: 'RANGED', advancedBuildableMask: 1 },
     tile, playerSide: 'SIDE_A' }), { type: 'ALLOWED', supportUnitId: platform.id });
-  assert.deepEqual(evaluateDeployment(viewBattlefield(field), { profile: { buildableType: 'MELEE', advancedBuildableMask: 1 },
+  assert.deepEqual(evaluateDeployment(field, { profile: { buildableType: 'MELEE', advancedBuildableMask: 1 },
     tile, playerSide: 'SIDE_A' }), { type: 'DENIED', reason: 'BUILDABLE_TYPE' });
 
   runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId, reason: 'SCRIPT' }]);

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { create, addUnit, addUnits, replaceUnit, removeUnit, setNavigation } from '../../dist/core/tactical/battlefield/state.js';
+import { create, addUnit, replaceUnit, removeUnit, setNavigation } from '../../dist/core/tactical/battlefield/state.js';
 import { view } from '../../dist/core/tactical/battlefield/view.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
@@ -37,7 +37,6 @@ test('pure transitions preserve input states and fixed views while allowing inde
   assert.equal(registered.units.get(1).vitality.hp, 100);
   assert.equal(view(left).getUnit(1).vitality.hp, 40);
   assert.equal(view(right).getUnit(1).vitality.hp, 70);
-  assert.equal(addUnits(registered, []), registered);
   assert.equal(replaceUnit(registered, original), registered);
 });
 
@@ -48,7 +47,7 @@ test('pure field updates maintain spatial indexes without acquiring blocking rel
   const enemy = unit(20, [1.25, 0], {
     allegiance: { side: 'ENEMY' }, blockable: { volume: 1 }, layer: { type: 'GROUND' },
   });
-  const before = addUnits(initial(), [blocker(10, 1), blocker(11, 2), enemy]);
+  const before = [blocker(10, 1), blocker(11, 2), enemy].reduce((field, unit) => addUnit(field, unit), initial());
   const beforeView = view(before);
   const removed = removeUnit(before, ref(before.units.get(10)));
 

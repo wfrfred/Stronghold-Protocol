@@ -21,11 +21,7 @@ import {
     type TileBinding,
 } from "../../core/tactical/unit/capability/tile-binding/capability.js";
 import type { Definition as UnitDefinition } from "../../core/tactical/unit/unit.js";
-import {
-    validateState as validateOccupancyState,
-    type State as OccupancyState,
-    type Occupancy,
-} from "../../core/tactical/unit/capability/occupancy/capability.js";
+import { type Occupancy } from "../../core/tactical/unit/capability/occupancy/capability.js";
 import type { Definition as VitalityDefinition } from "../../core/tactical/unit/capability/vitality/capability.js";
 import type { ArknightsPredefinedInstance } from "./level.js";
 import type { PredefinedPrefab } from "./prefab.js";
@@ -195,10 +191,6 @@ export function parsePredefinedDefinition(
 
     const definition = unitDefinition(instance, phase, profile);
     const position = Tile.center(instance.position);
-    const occupancy: OccupancyState = {
-        claims: [{ position: instance.position, slot: "SUPPORT", type: "PRESENT" }],
-    };
-    validateOccupancyState(occupancy);
 
     return createPredefinedDefinition({
         id,
@@ -208,7 +200,7 @@ export function parsePredefinedDefinition(
             type: "UNIT",
             definition,
             position,
-            claims: occupancy.claims,
+            registration: { tile: instance.position, slot: "SUPPORT" },
         },
     });
 }

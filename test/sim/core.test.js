@@ -19,7 +19,8 @@ import { Unit } from '../../server/sim/units.js';
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { makeBattle, flatStage, chessRec, enemyRec } from '../helpers/battleHarness.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
-import { create as createFieldState, addUnit, addUnits, replaceUnit, replaceUnits } from '../../dist/core/tactical/battlefield/state.js';
+import { create as createFieldState, addUnit, replaceUnit } from '../../dist/core/tactical/battlefield/state.js';
+import { addUnits, replaceUnits } from '../helpers/battlefield.js';
 import { maintain } from '../../dist/core/tactical/battlefield/storage/state.js';
 import { createBattleState, updateUnit as updateBattleUnit, removeUnit as removeBattleUnit } from '../../dist/core/tactical/battle/state.js';
 import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
@@ -49,7 +50,6 @@ import { initialize as initializeRouteState, hasRoute } from '../../dist/core/ta
 import { createUnitPlacementDefinition, instantiateUnitPlacement } from '../../dist/core/tactical/battle/creation/placement.js';
 import { createDefinition as createDeployableDefinition } from '../../dist/core/tactical/unit/capability/deployable/capability.js';
 import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
-import { validateState as validateOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy/capability.js';
 import { evaluateDeployment } from '../../dist/core/tactical/battlefield/deployment/query.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -330,25 +330,25 @@ test('core presence transitions preserve the original state when later settlemen
   assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 2]).map(unit => unit.id), [1]);
 });
 
-test('core placement applies explicit claims to a declared occupancy capability', () => {
-  const claims = [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'RESERVATION' }];
-  const placement = { definition: { id: 'placement', occupancy: {} }, position: [0, 0], claims };
+test('core placement applies an explicit registration to a declared occupancy capability', () => {
+  const registration = { tile: [0, 1], slot: 'OCCUPANT' };
+  const placement = { definition: { id: 'placement', occupancy: {} }, position: [0, 0], registration };
   const battle = fixtureBattle(17);
   const direct = instantiateUnitPlacement(battle, placement).value;
   const normalized = createUnitPlacementDefinition(placement);
   const placed = instantiateUnitPlacement(battle, normalized).value;
-  assert.equal(direct.occupancy.claims, claims);
-  assert.equal(normalized.claims, claims);
-  assert.equal(placed.occupancy.claims, claims);
+  assert.equal(direct.occupancy.registration, registration);
+  assert.equal(normalized.registration, registration);
+  assert.equal(placed.occupancy.registration, registration);
   assert.equal(placed.definition, placement.definition);
   assert.equal(placed.position, placement.position);
 
-  const nextClaims = [{ ...claims[0], position: [0, 2] }];
-  const next = instantiateUnitPlacement(battle, { ...normalized, claims: nextClaims }).value;
-  assert.equal(next.occupancy.claims, nextClaims);
-  assert.deepEqual(placed.occupancy.claims[0].position, [0, 1]);
+  const nextRegistration = { ...registration, tile: [0, 2] };
+  const next = instantiateUnitPlacement(battle, { ...normalized, registration: nextRegistration }).value;
+  assert.equal(next.occupancy.registration, nextRegistration);
+  assert.deepEqual(placed.occupancy.registration.tile, [0, 1]);
   assert.throws(() => instantiateUnitPlacement(battle, {
-    definition: { id: 'no-occupancy' }, position: [0, 0], claims,
+    definition: { id: 'no-occupancy' }, position: [0, 0], registration,
   }), /occupancy capability/);
 });
 
@@ -405,7 +405,7 @@ test('core unit initialization pairs every declared capability with its initiali
   assert.equal(hasRoute(unit), true);
   assert.equal(unit.route.main.definition, definition.route);
   assert.equal(unit.spatialPresence.present, true);
-  assert.deepEqual(unit.occupancy.claims, []);
+  assert.equal(unit.occupancy.registration, null);
   assert.deepEqual(unit.targetable.restrictions, []);
   assert.deepEqual(unit.tileBinding, {});
   assert.deepEqual(unit.blocker, { capacity: [], geometry: { radius: 0.7 }, rules: [], blocked: [], acquired: [], released: [] });
@@ -764,7 +764,7 @@ import { hasVitality, type Vitality, type Definition as VitalityDefinition } fro
 import { initialize as initializeLocomotionState, type Locomotion, type State as LocomotionState } from ${sourceModule('capability/locomotion/capability')};
 import { hasRoute } from ${sourceModule('capability/route/capability')};
 import type { Targetable } from ${sourceModule('capability/targetable/capability')};
-import { create as createBattlefieldState, addUnit, addUnits, replaceUnit, replaceUnits, removeUnit } from ${sourceModule('../battlefield/state')};
+import { create as createBattlefieldState, addUnit, replaceUnit, removeUnit } from ${sourceModule('../battlefield/state')};
 import { view } from ${sourceModule('../battlefield/view')};
 import type { BattlefieldView } from ${sourceModule('../battlefield/contract')};
 import type { BattlefieldMap } from ${sourceModule('../battlefield/map/map')};
@@ -790,7 +790,7 @@ declare const battleState: BattleState;
 declare const projectileDefinition: ProjectileDefinition<{ readonly charges: number }>;
 declare const projectileInput: ProjectileCreateInput<{ readonly charges: number }>;
 declare const typedProjectile: Projectile<{ readonly charges: number }>;
-declare const placement: { readonly definition: EnemyProbe & { readonly occupancy: Readonly<Record<string, never>> }; readonly position: readonly [number, number]; readonly claims: readonly OccupancyState['claims'][number][] };
+declare const placement: { readonly definition: EnemyProbe & { readonly occupancy: Readonly<Record<string, never>> }; readonly position: readonly [number, number]; readonly registration: OccupancyState['registration'] };
 `;
   const compile = (name, source) => {
     const path = join(directory, `${name}.mts`);
@@ -868,12 +868,12 @@ const normalizedPlaced = instantiateUnitPlacement(battleState, normalizedPlaceme
 type NormalizedPlacementCapabilities = Assert<typeof normalizedPlaced extends ExpectedPlacement ? true : false>;
 type NormalizedPlacementInput = Assert<ExpectedPlacement extends typeof normalizedPlaced ? true : false>;
 const requiredPlacement = createUnitPlacementDefinition({
-  definition: { ...enemyDefinition, occupancy: {} }, position: [0, 0], claims: [], extra: 31,
+  definition: { ...enemyDefinition, occupancy: {} }, position: [0, 0], registration: null, extra: 31,
 });
 const requiredPlaced = instantiateUnitPlacement(battleState, requiredPlacement).value;
-requiredPlaced.occupancy.claims;
+requiredPlaced.occupancy.registration;
 const requiredOccupancy: Occupancy = requiredPlaced;
-type NormalizedPlacementFields = Assert<Equal<keyof typeof requiredPlacement, 'definition' | 'position' | 'claims' | 'effects'>>;
+type NormalizedPlacementFields = Assert<Equal<keyof typeof requiredPlacement, 'definition' | 'position' | 'registration' | 'effects'>>;
 const ordinaryLocomotion: LocomotionState = enemy.locomotion;
 declare const guarded: Unit & {
   readonly definition: ImmutableData<EnemyProbe>;
@@ -890,8 +890,8 @@ if (hasRoute(guarded)) {
   guarded.route.main.definition;
 }
 const battlefield = createBattlefieldState({ map: battlefieldMap });
-const populatedField = addUnits(battlefield, [enemy]);
-const updatedField = replaceUnits(populatedField, [enemy]);
+const populatedField = addUnit(battlefield, enemy);
+const updatedField = replaceUnit(populatedField, enemy);
 const replacedField = replaceUnit(updatedField, enemy);
 const removedField = removeUnit(replacedField, unitRef(enemy));
 const battlefieldView: BattlefieldView = view(removedField);
@@ -924,7 +924,7 @@ battleState.battlefield.projectiles.replace(projectileRef(typedProjectile), type
       ['wide', `declare const wideDefinition: UnitDefinition; initializeUnit(battleState, { id: 1, definition: wideDefinition, position: [0, 0] }).value.locomotion.velocity;`],
       ['base-unit-definition', `declare const unit: Unit; unit.definition.vitality.maxHp;`],
       ['missing-route-refinement', `initializeUnit(battleState, { id: 1, definition: enemyDefinition, position: [0, 0] }).value.route.main;`],
-      ['optional-normalized-occupancy', `declare const optionalPlacement: UnitPlacementDefinition<EnemyProbe>; instantiateUnitPlacement(battleState, createUnitPlacementDefinition(optionalPlacement)).value.occupancy.claims;`],
+      ['optional-normalized-occupancy', `declare const optionalPlacement: UnitPlacementDefinition<EnemyProbe>; instantiateUnitPlacement(battleState, createUnitPlacementDefinition(optionalPlacement)).value.occupancy.registration;`],
       ['normalized-unknown-field', `createUnitPlacementDefinition({ definition: enemyDefinition, position: [0, 0], extra: 31 }).extra;`],
     ]) {
       const diagnostics = compile(name, source);
@@ -941,9 +941,8 @@ const deploymentTile = (overrides = {}) => ({
   playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null, ...overrides,
 });
 
-const deploymentUnit = (id, position, definition, claims, present = true) => {
-  const occupancy = { claims };
-  validateOccupancyState(occupancy);
+const deploymentUnit = (id, position, definition, registration, present = true) => {
+  const occupancy = { registration };
   return initialize({
     id, position, definition: Object.freeze({ id: `deployment_${id}`, ...definition }),
     states: { occupancy, spatialPresence: { present } },
@@ -964,7 +963,7 @@ test('core deployment uses buildability, side and terrain independently of navig
     } } }),
   ]);
   const runtime = createFieldState({ map });
-  const query = (type, column, playerSide = 'SIDE_A') => evaluateDeployment(viewBattlefield(runtime), {
+  const query = (type, column, playerSide = 'SIDE_A') => evaluateDeployment(runtime, {
     profile: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: type }), tile: [0, column], playerSide,
   });
   for (const [type, column, allowed] of [
@@ -982,59 +981,45 @@ test('core deployment uses buildability, side and terrain independently of navig
     assert.deepEqual(query('ALL', column), { type: 'DENIED', reason });
   }
   assert.deepEqual(query('ALL', 4, 'SIDE_B'), { type: 'ALLOWED', supportUnitId: null });
-  assert.deepEqual(evaluateDeployment(viewBattlefield(runtime), {
+  assert.deepEqual(evaluateDeployment(runtime, {
     profile: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: 'ALL', advancedBuildableMask: 2 }),
     tile: [0, 7], playerSide: 'SIDE_A',
   }), { type: 'ALLOWED', supportUnitId: null });
-  assert.deepEqual(evaluateDeployment(viewBattlefield(runtime), {
+  assert.deepEqual(evaluateDeployment(runtime, {
     profile: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: 'ALL', advancedBuildableMask: 3 }),
     tile: [0, 7], playerSide: 'SIDE_A',
   }), { type: 'ALLOWED', supportUnitId: null });
 });
 
-test('core occupancy separates present claims, reservations and geometric membership', () => {
-  const claims = [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' }];
-  const valid = { claims };
-  assert.equal(validateOccupancyState(valid), undefined);
-  assert.equal(valid.claims, claims);
-  assert.throws(() => validateOccupancyState({ claims: [{ ...claims[0], position: [0.5, 1] }] }), /integer/);
-  assert.throws(() => validateOccupancyState({ claims: [{ ...claims[0], position: [0, Number.MAX_SAFE_INTEGER + 1] }] }), /integer/);
+test('core occupancy registration is independent of spatial presence and geometric membership', () => {
   let runtime = createFieldState({ map: createBattlefieldMap(1, 4,
     Array.from({ length: 4 }, () => deploymentTile())) });
-  const present = deploymentUnit(1, [1, 0], {}, [
-    { position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' },
-  ], false);
-  const reserved = deploymentUnit(2, [2, 0], {}, [
-    { position: [0, 2], slot: 'DEPLOYMENT', type: 'RESERVATION' },
-  ], false);
-  const enemy = initialize({ id: 3, definition: Object.freeze({ id: 'enemy_without_claim' }), position: [1, 0] });
-  runtime = addUnits(runtime, [present, reserved, enemy]);
+  const hidden = deploymentUnit(1, [1, 0], {}, { tile: [0, 1], slot: 'OCCUPANT' }, false);
+  const displaced = deploymentUnit(2, [20, 0], {}, { tile: [0, 2], slot: 'OCCUPANT' }, false);
+  const enemy = initialize({ id: 3, definition: { id: 'enemy_without_registration' }, position: [1, 0] });
+  runtime = addUnits(runtime, [hidden, displaced, enemy]);
   assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 1]).map(unit => unit.id), [3]);
-  assert.deepEqual(viewBattlefield(runtime).occupancyAt([0, 1], 'DEPLOYMENT'), []);
-  assert.deepEqual(viewBattlefield(runtime).occupancyAt([0, 2], 'DEPLOYMENT'), [2]);
+  assert.deepEqual(viewBattlefield(runtime).occupancyAt([0, 1], 'OCCUPANT'), [1]);
+  assert.deepEqual(viewBattlefield(runtime).occupancyAt([0, 2], 'OCCUPANT'), [2]);
   const profile = createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: 'ALL' });
-  assert.equal(evaluateDeployment(viewBattlefield(runtime), { profile, tile: [0, 1], playerSide: 'SIDE_A' }).type, 'ALLOWED');
-  assert.deepEqual(evaluateDeployment(viewBattlefield(runtime), { profile, tile: [0, 2], playerSide: 'SIDE_A' }),
-    { type: 'DENIED', reason: 'OCCUPIED' });
+  for (const tile of [[0, 1], [0, 2]]) {
+    assert.deepEqual(evaluateDeployment(runtime, { profile, tile, playerSide: 'SIDE_A' }),
+      { type: 'DENIED', reason: 'OCCUPIED' });
+  }
 
-  const restored = { ...viewBattlefield(runtime).getUnit(1), spatialPresence: { present: true } };
-  runtime = replaceUnit(runtime, restored);
-  assert.deepEqual(viewBattlefield(runtime).occupancyAt([0, 1], 'DEPLOYMENT'), [1]);
+  const occupancy = runtime.occupancy;
+  runtime = replaceUnit(runtime, { ...runtime.units.get(1), spatialPresence: { present: true } });
+  assert.equal(runtime.occupancy, occupancy);
   assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 1]).map(unit => unit.id), [1, 3]);
   const original = viewBattlefield(runtime);
   const previousUnit = original.getUnit(1);
-  const occupancy = { claims: [
-    { ...previousUnit.occupancy.claims[0], slot: 'SUPPORT' },
-    { position: [0, 3], slot: 'DEPLOYMENT', type: 'RESERVATION' },
-  ] };
-  validateOccupancyState(occupancy);
-  const updated = { ...previousUnit, occupancy };
-  runtime = replaceUnit(runtime, updated);
-  assert.deepEqual(viewBattlefield(runtime).occupancyAt([0, 1], 'SUPPORT'), [1]);
-  assert.deepEqual(viewBattlefield(runtime).occupancyAt([0, 3], 'DEPLOYMENT'), [1]);
+  runtime = replaceUnit(runtime, { ...previousUnit,
+    occupancy: { registration: { tile: [0, 3], slot: 'SUPPORT' } },
+  });
+  assert.deepEqual(viewBattlefield(runtime).occupancyAt([0, 1], 'OCCUPANT'), []);
+  assert.deepEqual(viewBattlefield(runtime).occupancyAt([0, 3], 'SUPPORT'), [1]);
   assert.equal(original.getUnit(1), previousUnit);
-  assert.deepEqual(previousUnit.occupancy.claims,
-    [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' }]);
+  assert.deepEqual(previousUnit.occupancy.registration, { tile: [0, 1], slot: 'OCCUPANT' });
 });
 
 test('core support allows a platform and occupant to coexist without treating the platform as the occupant', () => {
@@ -1044,27 +1029,24 @@ test('core support allows a platform and occupant to coexist without treating th
   const platform = deploymentUnit(1, [1, 0], {
     vitality: Object.freeze({ maxHp: 100, defense: 0, resistance: 0 }),
     tileBinding: createTileBindingDefinition({ buildableType: 'RANGED', heightType: 'HIGHLAND' }),
-  }, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
+  }, { tile: [0, 1], slot: 'SUPPORT' });
   runtime = addUnit(runtime, platform);
   const profile = createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: 'RANGED' });
-  assert.deepEqual(evaluateDeployment(viewBattlefield(runtime), { profile, tile: [0, 1], playerSide: 'SIDE_A' }),
+  assert.deepEqual(evaluateDeployment(runtime, { profile, tile: [0, 1], playerSide: 'SIDE_A' }),
     { type: 'ALLOWED', supportUnitId: 1 });
-  const occupant = deploymentUnit(2, [1, 0], { deployable: profile }, [
-    { position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' },
-  ]);
+  const occupant = deploymentUnit(2, [1, 0], { deployable: profile }, { tile: [0, 1], slot: 'OCCUPANT' });
   runtime = maintain(runtime, {
     ...runtime,
     units: new Map(runtime.units).set(occupant.id, occupant),
-    supportRelations: [{ supportedUnitId: 2, supportUnitId: 1 }],
   });
   assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 1]).map(unit => unit.id), [1, 2]);
   assert.deepEqual(viewBattlefield(runtime).occupancyAt([0, 1], 'SUPPORT'), [1]);
-  assert.deepEqual(viewBattlefield(runtime).occupancyAt([0, 1], 'DEPLOYMENT'), [2]);
+  assert.deepEqual(viewBattlefield(runtime).occupancyAt([0, 1], 'OCCUPANT'), [2]);
   assert.equal(viewBattlefield(runtime).supportOf(2), 1);
   assert.deepEqual(viewBattlefield(runtime).supportedBy(1), [2]);
-  assert.deepEqual(evaluateDeployment(viewBattlefield(runtime), { profile, tile: [0, 1], playerSide: 'SIDE_A' }),
+  assert.deepEqual(evaluateDeployment(runtime, { profile, tile: [0, 1], playerSide: 'SIDE_A' }),
     { type: 'DENIED', reason: 'OCCUPIED' });
-  assert.deepEqual(evaluateDeployment(viewBattlefield(runtime), { profile, tile: [0, 1], playerSide: 'SIDE_A', relocatingUnitId: 2 }),
+  assert.deepEqual(evaluateDeployment(runtime, { profile, tile: [0, 1], playerSide: 'SIDE_A', relocatingUnitId: 2 }),
     { type: 'ALLOWED', supportUnitId: 1 });
   const retained = viewBattlefield(runtime);
   const removed = removeBattleUnit(createBattleState(runtime), 1, 'SCRIPT');
@@ -1076,5 +1058,5 @@ test('core support allows a platform and occupant to coexist without treating th
   assert.deepEqual(viewBattlefield(runtime).supportedBy(1), []);
   assert.deepEqual(viewBattlefield(runtime).supportRelations, []);
   assert.equal(viewBattlefield(runtime).getUnit(2).id, 2);
-  assert.deepEqual(viewBattlefield(runtime).occupancyAt([0, 1], 'DEPLOYMENT'), [2]);
+  assert.deepEqual(viewBattlefield(runtime).occupancyAt([0, 1], 'OCCUPANT'), [2]);
 });

@@ -1,4 +1,4 @@
-import { getLostSupports } from '../../dist/core/tactical/battlefield/support/relations.js';
+import { all as supports, lost } from '../../dist/core/tactical/battlefield/support.js';
 import * as route from '../../dist/core/tactical/unit/capability/route/operations.js';
 import * as locomotion from '../../dist/core/tactical/unit/capability/locomotion/operations.js';
 import * as units from '../../dist/core/tactical/unit/query.js';
@@ -365,7 +365,7 @@ function battlefieldProjectionHarness(rows = 2, columns = 5,
     const [selective, full] = branches.map(branch => branch.state);
     assert.deepEqual(selective, full);
     assert.deepEqual([...selective.units], [...full.units]);
-    for (const key of ['unitsByTile', 'occupancyBySlot']) {
+    for (const key of ['unitsByTile']) {
       const entries = state => [...state.spatial[key]].map(([key, ids]) => [key, [...ids]]);
       assert.deepEqual(entries(selective), entries(full));
     }
@@ -378,7 +378,7 @@ function battlefieldProjectionHarness(rows = 2, columns = 5,
       const settled = branch.settle(previous, content);
       assert.deepEqual(projectionFacts(previous), snapshot);
       branch.state = settled;
-      return { lostSupports: getLostSupports(previous.supportRelations, settled.supportRelations, settled.units) };
+      return { lostSupports: lost(previous, settled).map(relation => ({ supportedUnitId: relation.occupant.id, supportUnitId: relation.support.id })) };
     });
     assert.deepEqual(results[0], results[1]);
     equivalent();
@@ -400,7 +400,7 @@ function battlefieldProjectionHarness(rows = 2, columns = 5,
   return { branches, commit, reject, equivalent, get state() { return branches[0].state; } };
 }
 
-const projectionClaim = (column, type = 'PRESENT', slot = 'DEPLOYMENT') => ({ position: [0, column], type, slot });
+const projectionRegistration = (column, slot = 'OCCUPANT') => ({ tile: [0, column], slot });
 const projectionUnit = (id, position, definition = {}, states = {}) => initialize({
   id, position, definition: Object.freeze({ id: `projection_unit_${id}`, spatialPresence: {}, ...definition }), states,
 });
@@ -416,7 +416,7 @@ test('core selective projection retains untouched collections, indexes and route
   }].map(unit => [unit.id, unit])]) }));
   assert.notEqual(h.state.units, previous.units);
   assert.equal(h.state.spatial, previous.spatial);
-  assert.equal(h.state.supportRelations, previous.supportRelations);
+  assert.equal(h.state.occupancy, previous.occupancy);
   assert.equal('blockingRelations' in h.state, false);
   assert.equal(h.state.navigation, previous.navigation);
   assert.equal(h.state.units.get(1).route.main, progress);
@@ -455,24 +455,24 @@ test('complete battle updates retain or release blocking from the tile blocking 
   assert.deepEqual(blockedIds(hidden), []);
 });
 
-test('selective and full field projection preserve support cleanup independently of blocking', () => {
+test('selective and full field projection derive support cleanup independently of blocking', () => {
   const h = battlefieldProjectionHarness();
   const rider = projectionUnit(10, [1, 0], {}, {
-    spatialPresence: { present: true }, occupancy: { claims: [projectionClaim(1)] },
+    spatialPresence: { present: true }, occupancy: { registration: projectionRegistration(1) },
   });
   const platform = projectionUnit(12, [1, 0], {
     tileBinding: createTileBindingDefinition({ buildableType: 'ALL', heightType: 'HIGHLAND' }),
-  }, { spatialPresence: { present: true }, occupancy: { claims: [projectionClaim(1, 'PRESENT', 'SUPPORT')] } });
+  }, { spatialPresence: { present: true }, occupancy: { registration: projectionRegistration(1, 'SUPPORT') } });
   const relation = { supportedUnitId: 10, supportUnitId: 12 };
-  h.commit(state => ({ ...state, units: new Map([[10, rider], [12, platform]]), supportRelations: [relation] }));
-  const reservation = h.commit(state => ({ ...state, units: new Map([...state.units, [12, {
-    ...state.units.get(12), occupancy: { claims: [projectionClaim(1, 'RESERVATION', 'SUPPORT')] },
+  h.commit(state => ({ ...state, units: new Map([[10, rider], [12, platform]]) }));
+  const cleared = h.commit(state => ({ ...state, units: new Map([...state.units, [12, {
+    ...state.units.get(12), occupancy: { registration: null },
   }]]) }));
-  assert.deepEqual(reservation.lostSupports, [relation]);
-  h.commit(state => ({ ...state, units: new Map([...state.units, [12, platform]]), supportRelations: [relation] }));
+  assert.deepEqual(cleared.lostSupports, [relation]);
+  h.commit(state => ({ ...state, units: new Map([...state.units, [12, platform]]) }));
   const removed = h.commit(state => ({ ...state, units: new Map([...state.units].filter(([id]) => id !== 12)) }));
   assert.deepEqual(removed.lostSupports, [relation]);
-  assert.deepEqual(h.state.supportRelations, []);
+  assert.deepEqual(supports(h.state), []);
   assert.equal('blockingRelations' in h.state, false);
 });
 
@@ -514,11 +514,11 @@ test('complete battle updates preserve relation history and release on current e
   }
 });
 
-test('core selective and full projection reject invalid final references and claims atomically', () => {
+test('core selective and full projection reject invalid registrations atomically', () => {
   const h = battlefieldProjectionHarness();
   h.commit(state => ({ ...state, units: new Map([...state.units, ...[battlefieldUnit(10, [0, 0])].map(unit => [unit.id, unit])]) }));
   const reserved = projectionUnit(11, [1, 0], {}, { spatialPresence: { present: false },
-    occupancy: { claims: [projectionClaim(1, 'RESERVATION')] } });
+    occupancy: { registration: projectionRegistration(1) } });
   h.commit(state => ({ ...state, units: new Map([...state.units, ...[reserved].map(unit => [unit.id, unit])]) }));
   const hiddenSpatial = h.state.spatial;
   h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
@@ -526,7 +526,7 @@ test('core selective and full projection reject invalid final references and cla
   }].map(unit => [unit.id, unit])]) }));
   assert.deepEqual(h.state.units.get(11).position, [1e30, 0]);
   assert.equal(h.state.spatial, hiddenSpatial);
-  assert.deepEqual([...h.state.spatial.occupancyBySlot.get('1:DEPLOYMENT')], [11]);
+  assert.equal(h.state.occupancy.get(1).occupant.id, 11);
   h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
     ...state.units.get(11), position: Object.freeze([1, 0]), spatialPresence: { present: true },
   }].map(unit => [unit.id, unit])]) }));
@@ -536,12 +536,11 @@ test('core selective and full projection reject invalid final references and cla
   }].map(unit => [unit.id, unit])]) }));
   assert.equal(h.state.spatial.unitsByTile.has(1), false);
   h.reject(state => ({ ...state, units: new Map([...state.units, ...[projectionUnit(12, [2, 0], {}, {
-    occupancy: { claims: [projectionClaim(1)] },
-  })].map(unit => [unit.id, unit])]) }), /occupancy slot is already claimed/);
+    occupancy: { registration: projectionRegistration(1) },
+  })].map(unit => [unit.id, unit])]) }), /occupancy slot is already occupied/);
   h.reject(state => ({ ...state, units: new Map([...state.units, ...[projectionUnit(12, [2, 0], {}, {
-    spatialPresence: { present: false }, occupancy: { claims: [projectionClaim(99, 'RESERVATION')] },
-  })].map(unit => [unit.id, unit])]) }), /occupancy claim is outside/);
-  h.reject(state => ({ ...state, units: new Map([...state.units].filter(([id]) => id !== 10)), supportRelations: [{ supportedUnitId: 11, supportUnitId: 10 }] }), /invalid support relation/);
+    spatialPresence: { present: false }, occupancy: { registration: projectionRegistration(99) },
+  })].map(unit => [unit.id, unit])]) }), /occupancy registration is outside/);
   h.commit(state => ({ ...state, units: new Map([...state.units, ...[battlefieldUnit(12, [0, 0])].map(unit => [unit.id, unit])]) }));
   h.commit(state => ({ ...state, units: new Map([...new Map([...state.units].filter(([id]) => id !== 10)), ...[state.units.get(10)].map(unit => [unit.id, unit])]) }));
   assert.deepEqual([...h.state.units.keys()], [11, 12, 10]);

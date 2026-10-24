@@ -1,4 +1,4 @@
-import { getLostSupports } from '../../dist/core/tactical/battlefield/support/relations.js';
+import { all as supports, lost } from '../../dist/core/tactical/battlefield/support.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
@@ -41,10 +41,10 @@ function projectionHarness() {
         const settled = branch.settle(previous, content);
         assert.deepEqual(projectionFacts(previous), snapshot, 'settlement must preserve the prior state');
         branch.state = settled;
-        return { lostSupports: getLostSupports(previous.supportRelations, settled.supportRelations, settled.units) };
+        return { lostSupports: lost(previous, settled).map(relation => ({ supportedUnitId: relation.occupant.id, supportUnitId: relation.support.id })) };
       });
       assert.deepEqual(branches[0].state, branches[1].state);
-      for (const key of ['unitsByTile', 'occupancyBySlot']) {
+      for (const key of ['unitsByTile']) {
         const entries = state => [...state.spatial[key]].map(([key, ids]) => [key, [...ids]]);
         assert.deepEqual(entries(branches[0].state), entries(branches[1].state));
       }
@@ -54,7 +54,7 @@ function projectionHarness() {
   };
 }
 
-const claim = (column, slot, type = 'PRESENT') => ({ position: [0, column], slot, type });
+const registration = (column, slot) => ({ tile: [0, column], slot });
 const unit = (id, position, definition = {}, states = {}) => initialize({
   id, position, definition: { id: `spatial_dependencies_${id}`, ...definition }, states,
 });
@@ -63,7 +63,7 @@ const update = (id, mutate) => state => ({ ...state, units: new Map([...state.un
 
 const supportCases = [
   {
-    name: 'provider leaves spatial presence', id: 1, lost: true,
+    name: 'provider leaves spatial presence', id: 1, lost: false,
     mutate: unit => ({ ...unit, spatialPresence: { present: false } }),
   },
   {
@@ -71,12 +71,12 @@ const supportCases = [
     mutate: unit => ({ ...unit, spatialPresence: { present: false } }),
   },
   {
-    name: 'deployment becomes a reservation', id: 2, lost: true, claimsOnly: true,
-    mutate: unit => ({ ...unit, occupancy: { claims: [claim(1, 'DEPLOYMENT', 'RESERVATION')] } }),
+    name: 'occupant clears registration', id: 2, lost: true, registrationOnly: true,
+    mutate: unit => ({ ...unit, occupancy: { registration: null } }),
   },
   {
-    name: 'provider claim moves independently of its world position', id: 1, lost: true, claimsOnly: true,
-    mutate: unit => ({ ...unit, occupancy: { claims: [claim(2, 'SUPPORT')] } }),
+    name: 'provider registration moves independently of its world position', id: 1, lost: true, registrationOnly: true,
+    mutate: unit => ({ ...unit, occupancy: { registration: registration(2, 'SUPPORT') } }),
   },
 ];
 
@@ -85,44 +85,43 @@ for (const scenario of supportCases) {
     const h = projectionHarness();
     const provider = unit(1, [1, 0], {
       tileBinding: createTileBindingDefinition({ heightType: 'LOWLAND', buildableType: 'ALL' }),
-    }, { spatialPresence: { present: true }, occupancy: { claims: [claim(1, 'SUPPORT')] } });
+    }, { spatialPresence: { present: true }, occupancy: { registration: registration(1, 'SUPPORT') } });
     const supported = unit(2, [1, 0], {}, {
-      spatialPresence: { present: true }, occupancy: { claims: [claim(1, 'DEPLOYMENT')] },
+      spatialPresence: { present: true }, occupancy: { registration: registration(1, 'OCCUPANT') },
     });
     const relations = [{ supportedUnitId: 2, supportUnitId: 1 }];
-    h.commit(state => ({ ...state, units: new Map([...state.units, ...[provider, supported].map(unit => [unit.id, unit])]), supportRelations: relations }));
+    h.commit(register([provider, supported]));
     const previous = h.state;
     const facts = h.commit(update(scenario.id, scenario.mutate));
-    assert.deepEqual(h.state.supportRelations, []);
+    assert.equal(supports(h.state).length, scenario.lost ? 0 : 1);
     assert.deepEqual(facts.lostSupports, scenario.lost ? relations : []);
     assert.deepEqual(h.state.units.get(scenario.id).position, previous.units.get(scenario.id).position);
-    if (scenario.claimsOnly) {
+    if (scenario.registrationOnly) {
       assert.equal(h.state.spatial.unitsByTile, previous.spatial.unitsByTile);
-      assert.notEqual(h.state.spatial.occupancyBySlot, previous.spatial.occupancyBySlot);
+      assert.notEqual(h.state.occupancy, previous.occupancy);
+    } else {
+      assert.equal(h.state.occupancy, previous.occupancy);
     }
     assert.equal(h.state.navigation, previous.navigation);
   });
 }
 
-test('support ignores reservation changes while occupancy updates selectively', () => {
+test('equivalent registration values preserve occupancy indexes and relation facts', () => {
   const h = projectionHarness();
   const provider = unit(1, [1, 0], {
     tileBinding: createTileBindingDefinition({ heightType: 'LOWLAND', buildableType: 'ALL' }),
-  }, { occupancy: { claims: [claim(1, 'SUPPORT'), claim(3, 'SUPPORT', 'RESERVATION')] } });
-  const supported = unit(2, [1, 0], {}, { occupancy: { claims: [claim(1, 'DEPLOYMENT')] } });
-  const relations = [{ supportedUnitId: 2, supportUnitId: 1 }];
-  h.commit(state => ({ ...state, units: new Map([...state.units, ...[provider, supported].map(unit => [unit.id, unit])]), supportRelations: relations }));
+  }, { occupancy: { registration: registration(1, 'SUPPORT') } });
+  const supported = unit(2, [1, 0], {}, { occupancy: { registration: registration(1, 'OCCUPANT') } });
+  h.commit(register([provider, supported]));
   const previous = h.state;
   const facts = h.commit(update(1, unit => ({
-    ...unit, occupancy: { claims: [claim(1, 'SUPPORT'), claim(4, 'SUPPORT', 'RESERVATION')] },
+    ...unit, occupancy: { registration: registration(1, 'SUPPORT') },
   })));
-  assert.equal(h.state.supportRelations, previous.supportRelations);
   assert.deepEqual(facts.lostSupports, []);
   assert.equal(h.state.spatial.unitsByTile, previous.spatial.unitsByTile);
-  assert.deepEqual([...h.state.spatial.occupancyBySlot.get('4:SUPPORT')], [1]);
-  assert.equal(h.state.spatial.occupancyBySlot.has('3:SUPPORT'), false);
+  assert.equal(h.state.occupancy, previous.occupancy);
+  assert.equal(h.state.occupancy.get(1).support, previous.occupancy.get(1).support);
 });
-
 
 test('Field projections maintain spatial indexes without acquiring or owning blocking relations', () => {
   const h = projectionHarness();

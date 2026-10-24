@@ -1,7 +1,6 @@
 import { evaluateDeployment } from "../../battlefield/deployment/query.js";
-import type { SupportRelation } from "../../battlefield/support/relations.js";
 import * as blocking from "../blocking/operations.js";
-import { maintain } from "../../battlefield/storage/state.js";
+import * as battlefield from "../../battlefield/state.js";
 import { Tile, type TilePosition } from "../../geometry/coordinate.js";
 import { hasDeployable, type Deployable } from "../../unit/capability/deployable/capability.js";
 import { hasDefinition as hasTileBindingDefinition } from "../../unit/capability/tile-binding/capability.js";
@@ -15,7 +14,7 @@ import { enter, leave } from "../execution/unit.js";
 import {
     setBattlefield,
     appendEvents,
-    battlefieldView,
+    registerUnit,
     getUnit,
     type State as BattleState,
     type Result,
@@ -51,22 +50,6 @@ export type Rejection =
 export type DeployOutcome =
     | { readonly type: "DEPLOYED"; readonly cardId: card.Id; readonly unitId: Id }
     | { readonly type: "REJECTED"; readonly reason: Rejection };
-
-function supportsAfterPlacement(
-    state: BattleState,
-    unitId: Id,
-    supportUnitId: Id | null,
-): readonly SupportRelation[] {
-    const supports: SupportRelation[] = state.battlefield.supportRelations.filter(
-        (relation) => relation.supportedUnitId !== unitId,
-    );
-
-    if (supportUnitId !== null) {
-        supports.push({ supportedUnitId: unitId, supportUnitId });
-    }
-
-    return supports;
-}
 
 export function deploy(state: BattleState, request: DeployRequest): Result<DeployOutcome> {
     let value = getCard(state, request.cardId);
@@ -111,8 +94,8 @@ export function deploy(state: BattleState, request: DeployRequest): Result<Deplo
         return reject("INSUFFICIENT_DP");
     }
 
-    const slot = hasTileBindingDefinition(definition) ? "SUPPORT" : "DEPLOYMENT";
-    const decision = evaluateDeployment(battlefieldView(state), {
+    const slot = hasTileBindingDefinition(definition) ? "SUPPORT" : "OCCUPANT";
+    const decision = evaluateDeployment(state.battlefield, {
         profile: definition.deployable,
         tile: request.tilePosition,
         playerSide: request.playerSide,
@@ -126,7 +109,7 @@ export function deploy(state: BattleState, request: DeployRequest): Result<Deplo
     const placed = instantiateUnitPlacement(state, {
         definition,
         position: Tile.center(request.tilePosition),
-        claims: [{ position: request.tilePosition, slot, type: "PRESENT" }],
+        registration: { tile: request.tilePosition, slot },
     });
     state = placed.state;
     const unit = {
@@ -147,24 +130,7 @@ export function deploy(state: BattleState, request: DeployRequest): Result<Deplo
         ...state,
         deployment: changeDp(state.deployment, -cost, state.tick),
     };
-    const previous = state.battlefield;
-    const units = new Map(previous.units);
-
-    if (units.has(unit.id)) {
-        throw new RangeError(`duplicate unit: ${unit.id}`);
-    }
-
-    units.set(unit.id, unit);
-    const supportRelations = supportsAfterPlacement(state, unit.id, decision.supportUnitId);
-    state = setBattlefield(
-        state,
-        maintain(
-            previous,
-            { ...previous, units, supportRelations },
-            { updatedUnitIds: new Set([unit.id]), unitOrderChanged: true },
-        ),
-    );
-    state = blocking.maintain(state);
+    state = registerUnit(state, unit);
     state = appendEvents(state, [
         {
             type: "UNIT_DEPLOYED",
@@ -206,8 +172,8 @@ export function relocate(
         throw new RangeError(`unit ${request.unitId} cannot relocate`);
     }
 
-    const slot = hasTileBindingDefinition(unit.definition) ? "SUPPORT" : "DEPLOYMENT";
-    const decision = evaluateDeployment(battlefieldView(state), {
+    const slot = hasTileBindingDefinition(unit.definition) ? "SUPPORT" : "OCCUPANT";
+    const decision = evaluateDeployment(state.battlefield, {
         profile: unit.definition.deployable,
         tile: request.tilePosition,
         playerSide: request.playerSide,
@@ -223,29 +189,11 @@ export function relocate(
         ...unit,
         position: Tile.center(request.tilePosition),
         occupancy: {
-            claims: [
-                ...unit.occupancy.claims.filter((claim) => claim.type === "RESERVATION"),
-                { position: request.tilePosition, slot, type: "PRESENT" },
-            ],
+            registration: { tile: request.tilePosition, slot },
         },
     };
     const relations = blocking.capture(state, unitQueries.ref(unit));
-    const previous = state.battlefield;
-    const units = new Map(previous.units);
-    units.set(unit.id, moved);
-    const supportRelations = supportsAfterPlacement(state, unit.id, decision.supportUnitId);
-    state = setBattlefield(
-        state,
-        maintain(
-            previous,
-            {
-                ...previous,
-                units,
-                supportRelations,
-            },
-            { updatedUnitIds: new Set([unit.id]), unitOrderChanged: false },
-        ),
-    );
+    state = setBattlefield(state, battlefield.replaceUnit(state.battlefield, moved));
     state = blocking.releaseCaptured(state, relations);
     state = blocking.maintain(state);
 

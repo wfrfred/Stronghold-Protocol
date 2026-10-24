@@ -765,7 +765,7 @@ test('core battle snapshots share immutable values and retain the published tick
   assert.equal(repeated.execution, before.execution);
   assert.equal(repeated.predefinedPresence, before.predefinedPresence);
   assert.equal(repeated.blockingRelations, before.blockingRelations);
-  assert.equal(repeated.supportRelations, before.supportRelations);
+  assert.deepEqual(repeated.supportRelations, before.supportRelations);
   assert.equal(repeated.spawning.managedFinalUnitIds, before.spawning.managedFinalUnitIds);
   assert.strictEqual(routeDefinition, unit.definition.route);
 
@@ -2078,7 +2078,7 @@ test('core battle deploys, relocates and retreats units with immutable occupancy
   assert.equal(unit.id, 0);
   assert.equal(unit.definition, definition);
   assert.deepEqual(unit.position, [1, 0]);
-  assert.deepEqual(unit.occupancy.claims, [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' }]);
+  assert.deepEqual(unit.occupancy.registration, { tile: [0, 1], slot: 'OCCUPANT' });
   assert.deepEqual(deployed.events.filter(event => event.type === 'UNIT_DEPLOYED').map(event => event.unitId), [0]);
   assert.equal(runtime.navigation, maps);
 
@@ -2088,7 +2088,7 @@ test('core battle deploys, relocates and retreats units with immutable occupancy
   assert.equal(moved.id, unit.id);
   assert.equal(moved.definition, definition);
   assert.deepEqual(moved.position, [3, 0]);
-  assert.deepEqual(moved.occupancy.claims, [{ position: [0, 3], slot: 'DEPLOYMENT', type: 'PRESENT' }]);
+  assert.deepEqual(moved.occupancy.registration, { tile: [0, 3], slot: 'OCCUPANT' });
   assert.deepEqual(relocated.events.filter(event => event.type === 'UNIT_RELOCATED').map(event => event.unitId), [0]);
   assert.equal(runtime.navigation, maps);
 
@@ -2101,15 +2101,15 @@ test('core battle deploys, relocates and retreats units with immutable occupancy
   assert.deepEqual(runtime.snapshot().units.map(value => [value.id, value.position]), [[1, [1, 0]], [2, [3, 0]]]);
   assert.equal(runtime.navigation, maps);
 
-  const occupancy = { claims: [{ position: [0, 5], slot: 'DEPLOYMENT', type: 'RESERVATION' }] };
+  const occupancy = { registration: { tile: [0, 5], slot: 'OCCUPANT' } };
   const initialInput = deploymentBattleInput({
-    initialUnits: [{ definition: Object.freeze({ id: 'reserved_home', occupancy: {} }), position: [5, 0], claims: occupancy.claims,
+    initialUnits: [{ definition: Object.freeze({ id: 'reserved_home', occupancy: {} }), position: [5, 0], registration: occupancy.registration,
        }],
   }, [{ unit: definition }]);
   const reserved = new BattleRuntime(initialInput);
-  assert.equal(reserved.snapshot().units[0].occupancy.claims, occupancy.claims);
-  assert.deepEqual(reserved.snapshot().units[0].occupancy.claims,
-    [{ position: [0, 5], slot: 'DEPLOYMENT', type: 'RESERVATION' }]);
+  assert.equal(reserved.snapshot().units[0].occupancy.registration, occupancy.registration);
+  assert.deepEqual(reserved.snapshot().units[0].occupancy.registration,
+    { tile: [0, 5], slot: 'OCCUPANT' });
 
 
   const before = reserved.snapshot();
@@ -2140,7 +2140,7 @@ test('core battle deploys, relocates and retreats units with immutable occupancy
   crates.step([{ type: 'RELOCATE_UNIT', unitId: 0, tilePosition: [0, 3], playerSide: 'SIDE_A' }]);
   assert.deepEqual(navigationMap(crates.navigation).cells.map(cell => cell.cost), [1, 1, 1, 1000, 1, 1]);
   assert.deepEqual(initialCrate.units[0].position, [1, 0]);
-  assert.deepEqual(initialCrate.units[0].occupancy.claims, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
+  assert.deepEqual(initialCrate.units[0].occupancy.registration, { tile: [0, 1], slot: 'SUPPORT' });
   assert.equal(crates.navigation.baseline.FLY, baseline.baseline.FLY);
 
 
@@ -2186,7 +2186,7 @@ test('core visibility: commands from different domains execute in phase order be
   const definition = deployableDefinition();
   const spec = deploymentBattleInput({ predefines: [{
     id: 17, alias: null, initiallyPresent: true, creation: {
-      type: 'UNIT', definition, position: [1, 0], claims: [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' }],
+      type: 'UNIT', definition, position: [1, 0], registration: { tile: [0, 1], slot: 'OCCUPANT' },
     },
   }] }, [{ unit: definition }]);
   const runtime = new BattleRuntime(spec);
@@ -2220,27 +2220,27 @@ test('core elevated support disables blocking without changing target layer and 
     vitality: Object.freeze({ maxHp: 100, defense: 0, resistance: 0 }), allegiance: Object.freeze({ side: 'ENEMY' }),
     layer: Object.freeze({ type: 'GROUND' }), blockable: Object.freeze({ volume: 1 }),
   });
-  const occupancy = { claims: [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }] };
+  const occupancy = { registration: { tile: [0, 1], slot: 'SUPPORT' } };
   const recipe = createPredefinedDefinition({ id: 50, alias: 'test_platform', initiallyPresent: true, creation: {
-    type: 'UNIT', definition: provider, position: [1, 0], claims: occupancy.claims,
+    type: 'UNIT', definition: provider, position: [1, 0], registration: occupancy.registration,
   } });
-  assert.equal(recipe.creation.claims, occupancy.claims);
-  assert.deepEqual(recipe.creation.claims, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
-  const claims = [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }];
+  assert.equal(recipe.creation.registration, occupancy.registration);
+  assert.deepEqual(recipe.creation.registration, { tile: [0, 1], slot: 'SUPPORT' });
+  const registration = { tile: [0, 1], slot: 'SUPPORT' };
   const hiddenRecipe = createPredefinedDefinition({ ...recipe, initiallyPresent: false,
-    creation: { ...recipe.creation, claims,  } });
+    creation: { ...recipe.creation, registration } });
   const runtime = new BattleRuntime(deploymentBattleInput({
     initialUnits: [{ definition: enemyDefinition, position: [1, 0] }],
     predefines: [hiddenRecipe],
   }, [{ unit: definition }]));
-  assert.equal(hiddenRecipe.creation.claims, claims);
+  assert.equal(hiddenRecipe.creation.registration, registration);
 
   assert.deepEqual(runtime.snapshot().predefinedPresence, []);
   runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId: 50 }]);
   const platformId = runtime.snapshot().predefinedPresence[0].source.unitId;
   const platform = runtime.snapshot().units.find(unit => unit.id === platformId);
-  assert.equal(platform.occupancy.claims, hiddenRecipe.creation.claims);
-  assert.deepEqual(platform.occupancy.claims, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
+  assert.equal(platform.occupancy.registration, hiddenRecipe.creation.registration);
+  assert.deepEqual(platform.occupancy.registration, { tile: [0, 1], slot: 'SUPPORT' });
 
 
 

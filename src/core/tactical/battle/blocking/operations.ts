@@ -17,7 +17,7 @@ import {
 } from "../../unit/capability/blocking/blockable.js";
 import { hasLayer } from "../../unit/capability/layer/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
-import { hasTileBinding } from "../../unit/capability/tile-binding/capability.js";
+import * as support from "../../battlefield/support.js";
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
 import * as units from "../../unit/query.js";
 import type { Unit } from "../../unit/unit.js";
@@ -45,16 +45,9 @@ function canSearch(battle: BattleState, unit: Unit & Blocker): boolean {
         return false;
     }
 
-    const supportId = battle.battlefield.supportRelations.find(
-        (relation) => relation.supportedUnitId === unit.id,
-    )?.supportUnitId;
-    const support = supportId === undefined ? undefined : battle.battlefield.units.get(supportId);
+    const relation = support.of(battle.battlefield, units.ref(unit));
 
-    if (
-        support !== undefined &&
-        hasTileBinding(support) &&
-        support.definition.tileBinding.heightType === "HIGHLAND"
-    ) {
+    if (relation?.support.definition.tileBinding.heightType === "HIGHLAND") {
         return false;
     }
 

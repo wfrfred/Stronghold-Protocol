@@ -4,7 +4,7 @@ import type { State as BattlefieldState } from "../battlefield/state.js";
 import { view } from "../battlefield/view.js";
 import { assertNonnegativeSafeInteger } from "../../common/assert.js";
 import type { MechanismId, Mechanism } from "./mechanism.js";
-import { getLostSupports } from "../battlefield/support/relations.js";
+import * as support from "../battlefield/support.js";
 import type { Unit, Id } from "../unit/unit.js";
 import { ref } from "../unit/query.js";
 import * as blocking from "./blocking/operations.js";
@@ -73,24 +73,45 @@ export function createBattleState(
 }
 
 export function setBattlefield(state: State, next: BattlefieldState): State {
+    const updated = publishBattlefield(state, next);
+
+    return notifyLostSupports(updated.state, updated.value);
+}
+
+function publishBattlefield(
+    state: State,
+    next: BattlefieldState,
+): Result<readonly support.Relation[]> {
     if (next === state.battlefield) {
-        return state;
+        return { state, value: [] };
     }
 
-    const lostSupports = getLostSupports(
-        state.battlefield.supportRelations,
-        next.supportRelations,
-        next.units,
-    );
+    const lostSupports = support.lost(state.battlefield, next);
 
-    return appendEvents(
-        { ...state, battlefield: next },
-        lostSupports.map((relation): Event => ({
-            type: "SUPPORT_LOST",
-            ...relation,
-            tick: state.tick,
-        })),
-    );
+    return {
+        state: appendEvents(
+            { ...state, battlefield: next },
+            lostSupports.map((relation): Event => ({
+                type: "SUPPORT_LOST",
+                supportedUnitId: relation.occupant.id,
+                supportUnitId: relation.support.id,
+                tick: state.tick,
+            })),
+        ),
+        value: lostSupports,
+    };
+}
+
+function notifyLostSupports(state: State, lostSupports: readonly support.Relation[]): State {
+    for (const relation of lostSupports) {
+        state =
+            relation.support.definition.tileBinding.onSupportLost?.(state, relation.support, {
+                tile: relation.tile,
+                occupant: ref(relation.occupant),
+            }) ?? state;
+    }
+
+    return state;
 }
 
 export function battlefieldView(state: State): BattlefieldView {
@@ -143,15 +164,15 @@ export function updateUnit<U extends Unit>(state: State, unit: U): State {
         return state;
     }
 
-    state = setBattlefield(state, battlefield.replaceUnit(state.battlefield, unit));
-    const synchronized = blocking.synchronize(state, previous, unit);
+    const updated = publishBattlefield(state, battlefield.replaceUnit(state.battlefield, unit));
+    const synchronized = blocking.synchronize(updated.state, previous, unit);
     state = synchronized.state;
 
     if (synchronized.value !== undefined) {
         state = blocking.notify(state, synchronized.value);
     }
 
-    return blocking.maintain(state);
+    return blocking.maintain(notifyLostSupports(state, updated.value));
 }
 
 export function registerUnit<U extends Unit>(state: State, unit: U): State {

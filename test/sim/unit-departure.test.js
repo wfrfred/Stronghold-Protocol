@@ -87,7 +87,6 @@ function fixture() {
         getUnit: (id) => byId.get(id),
         blockerOf: () => undefined,
         blockedBy: () => [],
-        supportRelations: [],
     };
     let work = createBattleState(fixtureBattlefield(battlefield), undefined);
     for (const id of [0, 1]) work = activate(work, unitRef(getUnit(work, id))).state;

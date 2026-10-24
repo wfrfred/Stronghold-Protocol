@@ -5,7 +5,10 @@ import { hasBlocker } from "../unit/capability/blocking/blocker.js";
 import { hasBlockable, resolveVolume } from "../unit/capability/blocking/blockable.js";
 import type { BattlefieldView, BlockingRelation } from "./contract.js";
 import type { State } from "./state.js";
-import { battlefieldTileKey, battlefieldOccupancyKey } from "./storage/indexes.js";
+import { battlefieldTileKey } from "./storage/indexes.js";
+import { at } from "./occupancy.js";
+import * as support from "./support.js";
+import { ref } from "../unit/query.js";
 
 const blockingProjections = new WeakMap<ReadonlyMap<Id, Unit>, readonly BlockingRelation[]>();
 
@@ -40,7 +43,12 @@ export function view<U extends Unit>(state: State<U>): BattlefieldView<U> {
         get blockingRelations() {
             return projectBlocking(state.units);
         },
-        supportRelations: state.supportRelations,
+        get supportRelations() {
+            return support.all(state).map((relation) => ({
+                supportedUnitId: relation.occupant.id,
+                supportUnitId: relation.support.id,
+            }));
+        },
         get unitIds() {
             return [...state.units.keys()];
         },
@@ -84,16 +92,20 @@ export function view<U extends Unit>(state: State<U>): BattlefieldView<U> {
                 : 0;
         },
         occupancyAt: (position, slot) => {
-            const key = battlefieldOccupancyKey(map, position, slot);
+            const occupancy = at(state, position);
+            const reference = slot === "OCCUPANT" ? occupancy?.occupant : occupancy?.support;
 
-            return key === undefined ? [] : [...(state.spatial.occupancyBySlot.get(key) ?? [])];
+            return reference === undefined || reference === null ? [] : [reference.id];
         },
-        supportOf: (id) =>
-            state.supportRelations.find((relation) => relation.supportedUnitId === id)
-                ?.supportUnitId,
+        supportOf: (id) => {
+            const unit = state.units.get(id);
+
+            return unit === undefined ? undefined : support.of(state, ref(unit))?.support.id;
+        },
         supportedBy: (id) =>
-            state.supportRelations
-                .filter((relation) => relation.supportUnitId === id)
-                .map((relation) => relation.supportedUnitId),
+            support
+                .all(state)
+                .filter((relation) => relation.support.id === id)
+                .map((relation) => relation.occupant.id),
     };
 }

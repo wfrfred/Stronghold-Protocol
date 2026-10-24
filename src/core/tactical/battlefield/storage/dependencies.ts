@@ -1,15 +1,10 @@
 import { World } from "../../geometry/coordinate.js";
-import {
-    hasOccupancy,
-    isOccupancyClaimActive,
-    type OccupancyClaim,
-} from "../../unit/capability/occupancy/capability.js";
+import { hasOccupancy } from "../../unit/capability/occupancy/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
 import type { Unit, Id } from "../../unit/unit.js";
 import type { BattlefieldMap } from "../map/map.js";
-import { battlefieldTileKey } from "./indexes.js";
+import { battlefieldTileKey, sameRegistration } from "./indexes.js";
 import type { BattlefieldContent, BattlefieldState } from "./state.js";
-import { readSupportFacts, sameSupportFacts } from "../support/facts.js";
 
 export interface BattlefieldDependencyChanges {
     readonly updatedUnitIds: ReadonlySet<Id>;
@@ -47,39 +42,6 @@ export function compareUnits<U extends Unit>(
     return { updatedUnitIds, unitOrderChanged };
 }
 
-const EMPTY_CLAIMS: readonly OccupancyClaim[] = Object.freeze([]);
-
-function sameClaims(left: readonly OccupancyClaim[], right: readonly OccupancyClaim[]): boolean {
-    return (
-        left === right ||
-        (left.length === right.length &&
-            left.every((claim, index) => {
-                const other = right[index]!;
-
-                return (
-                    claim.slot === other.slot &&
-                    claim.type === other.type &&
-                    claim.position[0] === other.position[0] &&
-                    claim.position[1] === other.position[1]
-                );
-            }))
-    );
-}
-
-function sameOccupancyInputs(left: Unit, right: Unit): boolean {
-    const leftClaims = hasOccupancy(left) ? left.occupancy.claims : EMPTY_CLAIMS;
-    const rightClaims = hasOccupancy(right) ? right.occupancy.claims : EMPTY_CLAIMS;
-
-    if (leftClaims === rightClaims && isSpatiallyPresent(left) === isSpatiallyPresent(right)) {
-        return true;
-    }
-
-    return sameClaims(
-        leftClaims.filter((claim) => isOccupancyClaimActive(left, claim)),
-        rightClaims.filter((claim) => isOccupancyClaimActive(right, claim)),
-    );
-}
-
 export function deriveBattlefieldDependencies<U extends Unit>(
     map: BattlefieldMap,
     previous: BattlefieldState<U>,
@@ -88,7 +50,6 @@ export function deriveBattlefieldDependencies<U extends Unit>(
 ) {
     let unitTiles = changes.unitOrderChanged;
     let occupancy = changes.unitOrderChanged;
-    let support = changes.unitOrderChanged;
 
     for (const id of changes.updatedUnitIds) {
         const left = previous.units.get(id);
@@ -106,9 +67,11 @@ export function deriveBattlefieldDependencies<U extends Unit>(
                 battlefieldTileKey(map, World.toTile(right.position));
         }
 
-        occupancy ||= !sameOccupancyInputs(left, right);
-        support ||= !sameSupportFacts(readSupportFacts(left), readSupportFacts(right));
+        occupancy ||= !sameRegistration(
+            hasOccupancy(left) ? left.occupancy.registration : null,
+            hasOccupancy(right) ? right.occupancy.registration : null,
+        );
     }
 
-    return { unitTiles, occupancy, support };
+    return { unitTiles, occupancy };
 }

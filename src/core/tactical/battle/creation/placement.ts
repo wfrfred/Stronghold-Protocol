@@ -6,16 +6,15 @@ import type { ImmutableData } from "../../../common/immutable-data.js";
 import type { Effects } from "../../unit/effect/effects.js";
 import {
     hasOccupancy,
-    validateState as validateOccupancy,
     type Occupancy,
-    type OccupancyClaim,
+    type Registration,
 } from "../../unit/capability/occupancy/capability.js";
 import type { Result, State as BattleState } from "../state.js";
 
 export interface UnitPlacementDefinition<D extends Definition = Definition> {
     readonly definition: D;
     readonly position: WorldPosition;
-    readonly claims?: readonly OccupancyClaim[];
+    readonly registration?: Registration | null;
     readonly effects?: Effects;
 }
 
@@ -24,7 +23,7 @@ type NormalizedUnitPlacement<P extends UnitPlacementDefinition> = P extends unkn
           readonly definition: ImmutableData<P["definition"]>;
           readonly position: WorldPosition;
           readonly effects?: Effects;
-          readonly claims?: readonly OccupancyClaim[];
+          readonly registration?: Registration | null;
       }
     : never;
 
@@ -36,7 +35,7 @@ export function createUnitPlacementDefinition(
 ): NormalizedUnitPlacement<UnitPlacementDefinition> {
     return Object.freeze({
         definition: placement.definition,
-        ...(placement.claims === undefined ? {} : { claims: placement.claims }),
+        ...(placement.registration === undefined ? {} : { registration: placement.registration }),
         position: placement.position,
         ...(placement.effects === undefined ? {} : { effects: placement.effects }),
     });
@@ -72,13 +71,12 @@ export function instantiateUnitPlacement(
     battle = initialized.state;
     let unit: Unit = initialized.value;
 
-    if (placement.claims !== undefined) {
+    if (placement.registration !== undefined) {
         if (!hasOccupancy(unit)) {
-            throw new TypeError("unit placement claims require occupancy capability");
+            throw new TypeError("unit placement registration requires occupancy capability");
         }
 
-        const occupancy = { claims: placement.claims };
-        validateOccupancy(occupancy);
+        const occupancy = { registration: placement.registration };
         const occupied: Unit & Occupancy = { ...unit, occupancy };
         unit = occupied;
     }
