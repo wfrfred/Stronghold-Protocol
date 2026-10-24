@@ -3,7 +3,6 @@ import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 
 import { appendEvents, removeUnit } from "../../dist/core/tactical/battle/state.js";
-import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
 import { advancePredefined } from "../../dist/core/tactical/battle/steps/predefined.js";
 
 import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
@@ -123,10 +122,8 @@ test("starting a new tick clears temporary facts without changing retained state
                 received.push(state);
                 assert.deepEqual(state.events, []);
                 assert.deepEqual(state.removedUnits, []);
-                assert.equal(state.closedLifetimes.size, 0);
                 if (state.tick === 0) {
                     state = removeUnit(state, 1, "SCRIPT");
-                    state = closeLifetime(state, { type: "SKILL", ref: { host: { id: 0 }, id: 99 } });
                     state = appendEvents(state, [{ type: "ROUTE_COMPLETED", unitId: 1, tick: 0 }]);
                 }
                 returned.push(state);
@@ -142,10 +139,8 @@ test("starting a new tick clears temporary facts without changing retained state
     assert.equal(battle.snapshot().completedRouteCount, 1);
     assert.equal(returned[0].events.length, 1);
     assert.equal(returned[0].removedUnits.length, 1);
-    assert.equal(returned[0].closedLifetimes.size, 1);
     assert.notEqual(received[1].events, returned[0].events);
     assert.notEqual(received[1].removedUnits, returned[0].removedUnits);
-    assert.notEqual(received[1].closedLifetimes, returned[0].closedLifetimes);
 });
 
 test("a failed tick publishes neither schedule nor predefined or statistics changes", () => {

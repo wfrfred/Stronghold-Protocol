@@ -43,7 +43,6 @@ export interface State {
     readonly result: BattleResult | null;
     readonly events: readonly Event[];
     readonly removedUnits: readonly UnitRemoval[];
-    readonly closedLifetimes: ReadonlySet<string>;
 }
 
 export interface Result<A> {
@@ -73,7 +72,6 @@ export function createBattleState(
         result: null,
         events: [],
         removedUnits: [],
-        closedLifetimes: new Set(),
     };
 }
 

@@ -153,7 +153,6 @@ export class BattleRuntime {
             ...this.#state,
             events: [],
             removedUnits: [],
-            closedLifetimes: new Set(),
         };
 
         state = advanceDeployment(state, tick);

@@ -275,9 +275,6 @@ function createContext<S extends object, H extends object>(
 }
 
 function available(battle: BattleState, lifetime: Lifetime): boolean {
-    if (battle.closedLifetimes.has(key(lifetime))) {
-        return false;
-    }
     switch (lifetime.type) {
         case "UNIT":
             return units.get(battle, lifetime.ref)?.lifecycle === "PRESENT";

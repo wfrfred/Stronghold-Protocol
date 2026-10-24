@@ -133,7 +133,6 @@ test("departure callbacks observe LEAVING while old snapshots remain PRESENT", (
   assert.equal(getUnit(original, 0).lifecycle, "PRESENT");
   assert.equal(getUnit(state, 0), undefined);
   assert.deepEqual(state.removedUnits.map(({ unitId, reason }) => [unitId, reason]), [[0, "RETREAT"]]);
-  assert.equal(state.closedLifetimes.has("UNIT:0"), false);
 });
 
 test("skill finish sees LEAVING and cannot install dependencies on its departing source", () => {
