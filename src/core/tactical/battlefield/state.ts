@@ -19,7 +19,7 @@ export function create<U extends Unit = Unit>(options: BattlefieldRuntimeOptions
 
     return {
         map: options.map,
-        ...createBattlefieldState<U>(options.map, state),
+        ...createBattlefieldState<U>(state),
     };
 }
 
@@ -43,14 +43,7 @@ export function addUnit<U extends Unit>(state: State<U>, unit: U): State<U> {
     const units = new Map(state.units);
     units.set(unit.id, unit);
 
-    return maintain(
-        state,
-        { ...state, units },
-        {
-            updatedUnitIds: new Set([unit.id]),
-            unitOrderChanged: true,
-        },
-    );
+    return maintain(state, { ...state, units }, new Set([unit.id]));
 }
 
 export function replaceUnit<U extends Unit>(state: State<U>, unit: U): State<U> {
@@ -67,14 +60,7 @@ export function replaceUnit<U extends Unit>(state: State<U>, unit: U): State<U> 
     const units = new Map(state.units);
     units.set(unit.id, unit);
 
-    return maintain(
-        state,
-        { ...state, units },
-        {
-            updatedUnitIds: new Set([unit.id]),
-            unitOrderChanged: false,
-        },
-    );
+    return maintain(state, { ...state, units }, new Set([unit.id]));
 }
 
 export function removeUnit<U extends Unit>(state: State<U>, reference: Ref<Unit>): State<U> {
@@ -82,14 +68,7 @@ export function removeUnit<U extends Unit>(state: State<U>, reference: Ref<Unit>
     const units = new Map(state.units);
     units.delete(reference.id);
 
-    return maintain(
-        state,
-        { ...state, units },
-        {
-            updatedUnitIds: new Set([reference.id]),
-            unitOrderChanged: true,
-        },
-    );
+    return maintain(state, { ...state, units }, new Set([reference.id]));
 }
 
 export function setNavigation<U extends Unit>(state: State<U>, next: navigation.State): State<U> {

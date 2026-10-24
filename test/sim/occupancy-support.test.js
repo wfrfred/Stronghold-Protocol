@@ -1,3 +1,4 @@
+import { view } from "../../dist/core/tactical/battlefield/view.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as field from "../../dist/core/tactical/battlefield/state.js";
@@ -67,7 +68,7 @@ test("one tile independently registers an occupant and a support with typed iden
     assert.equal(entry.support.id, 10);
     assert.equal(battle.battlefield.occupancy.size, 1);
     assert.equal("supportRelations" in battle.battlefield, false);
-    assert.equal("occupancyBySlot" in battle.battlefield.spatial, false);
+    assert.deepEqual(view(battle.battlefield).unitsAt([0, 0]).map(unit => unit.id), [10, 20]);
     assert.equal(support.of(battle.battlefield, entry.occupant).support, getUnit(battle, 10));
 });
 

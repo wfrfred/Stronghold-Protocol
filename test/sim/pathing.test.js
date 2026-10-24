@@ -1,3 +1,4 @@
+import { view } from "../../dist/core/tactical/battlefield/view.js";
 import { all as supports, lost } from '../../dist/core/tactical/battlefield/support.js';
 import * as route from '../../dist/core/tactical/unit/capability/route/operations.js';
 import * as locomotion from '../../dist/core/tactical/unit/capability/locomotion/operations.js';
@@ -359,15 +360,16 @@ function battlefieldProjectionHarness(rows = 2, columns = 5,
       WALK: projectStaticNavigationMap(map, 'WALK', 0),
       FLY: projectStaticNavigationMap(map, 'FLY', 0),
     });
-    return { baseline, settle, state: { map, ...createBattlefieldState(map, createNavigation(baseline)) } };
+    return { baseline, settle, state: { map, ...createBattlefieldState(createNavigation(baseline)) } };
   });
   const equivalent = () => {
     const [selective, full] = branches.map(branch => branch.state);
     assert.deepEqual(selective, full);
     assert.deepEqual([...selective.units], [...full.units]);
-    for (const key of ['unitsByTile']) {
-      const entries = state => [...state.spatial[key]].map(([key, ids]) => [key, [...ids]]);
-      assert.deepEqual(entries(selective), entries(full));
+    for (let row = 0; row < map.rows; row++) {
+      for (let column = 0; column < map.columns; column++) {
+        assert.deepEqual(view(selective).unitsAt([row, column]), view(full).unitsAt([row, column]));
+      }
     }
   };
   const commit = transform => {
@@ -405,7 +407,7 @@ const projectionUnit = (id, position, definition = {}, states = {}) => initializ
   id, position, definition: Object.freeze({ id: `projection_unit_${id}`, spatialPresence: {}, ...definition }), states,
 });
 
-test('core selective projection retains untouched collections, indexes and route intent on nonspatial updates', () => {
+test('core selective projection retains occupancy and route intent while queries read current Unit values', () => {
   const h = battlefieldProjectionHarness();
   const routed = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [coreMove(4)] });
   h.commit(state => ({ ...state, units: new Map([...state.units, ...[routed.enemy].map(unit => [unit.id, unit])]) }));
@@ -415,12 +417,12 @@ test('core selective projection retains untouched collections, indexes and route
     ...state.units.get(1), vitality: { ...state.units.get(1).vitality, hp: 90 },
   }].map(unit => [unit.id, unit])]) }));
   assert.notEqual(h.state.units, previous.units);
-  assert.equal(h.state.spatial, previous.spatial);
   assert.equal(h.state.occupancy, previous.occupancy);
   assert.equal('blockingRelations' in h.state, false);
   assert.equal(h.state.navigation, previous.navigation);
   assert.equal(h.state.units.get(1).route.main, progress);
-  assert.equal(h.state.units.get([...h.state.spatial.unitsByTile.get(0)][0]).vitality.hp, 90);
+  assert.equal(view(h.state).unitsAt([0, 0])[0].vitality.hp, 90);
+  assert.equal(view(previous).unitsAt([0, 0])[0].vitality.hp, 100);
   assert.equal(previous.units.get(1).vitality.hp, 100);
 });
 
@@ -520,21 +522,24 @@ test('core selective and full projection reject invalid registrations atomically
   const reserved = projectionUnit(11, [1, 0], {}, { spatialPresence: { present: false },
     occupancy: { registration: projectionRegistration(1) } });
   h.commit(state => ({ ...state, units: new Map([...state.units, ...[reserved].map(unit => [unit.id, unit])]) }));
-  const hiddenSpatial = h.state.spatial;
+  const hiddenView = view(h.state);
+  const occupancy = h.state.occupancy;
   h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
     ...state.units.get(11), position: Object.freeze([1e30, 0]),
   }].map(unit => [unit.id, unit])]) }));
   assert.deepEqual(h.state.units.get(11).position, [1e30, 0]);
-  assert.equal(h.state.spatial, hiddenSpatial);
+  assert.deepEqual(view(h.state).unitsAt([0, 1]), []);
+  assert.equal(h.state.occupancy, occupancy);
   assert.equal(h.state.occupancy.get(1).occupant.id, 11);
   h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
     ...state.units.get(11), position: Object.freeze([1, 0]), spatialPresence: { present: true },
   }].map(unit => [unit.id, unit])]) }));
-  assert.deepEqual([...h.state.spatial.unitsByTile.get(1)], [11]);
+  assert.deepEqual(view(h.state).unitsAt([0, 1]).map(unit => unit.id), [11]);
+  assert.deepEqual(hiddenView.unitsAt([0, 1]), []);
   h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
     ...state.units.get(11), position: Object.freeze([1e30, 0]), spatialPresence: { present: false },
   }].map(unit => [unit.id, unit])]) }));
-  assert.equal(h.state.spatial.unitsByTile.has(1), false);
+  assert.deepEqual(view(h.state).unitsAt([0, 1]), []);
   h.reject(state => ({ ...state, units: new Map([...state.units, ...[projectionUnit(12, [2, 0], {}, {
     occupancy: { registration: projectionRegistration(1) },
   })].map(unit => [unit.id, unit])]) }), /occupancy slot is already occupied/);
@@ -544,7 +549,7 @@ test('core selective and full projection reject invalid registrations atomically
   h.commit(state => ({ ...state, units: new Map([...state.units, ...[battlefieldUnit(12, [0, 0])].map(unit => [unit.id, unit])]) }));
   h.commit(state => ({ ...state, units: new Map([...new Map([...state.units].filter(([id]) => id !== 10)), ...[state.units.get(10)].map(unit => [unit.id, unit])]) }));
   assert.deepEqual([...h.state.units.keys()], [11, 12, 10]);
-  assert.deepEqual([...h.state.spatial.unitsByTile.get(0)], [12, 10]);
+  assert.deepEqual(view(h.state).unitsAt([0, 0]).map(unit => unit.id), [12, 10]);
 });
 
 const coreGround = (overrides = {}) => ({

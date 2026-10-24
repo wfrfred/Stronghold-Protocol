@@ -40,7 +40,7 @@ test('pure transitions preserve input states and fixed views while allowing inde
   assert.equal(replaceUnit(registered, original), registered);
 });
 
-test('pure field updates maintain spatial indexes without acquiring blocking relations', () => {
+test('pure field updates expose current tile queries without acquiring blocking relations', () => {
   const blocker = (id, column) => unit(id, [column, 0], {
     allegiance: { side: 'ALLY' }, blocker: { capacity: 1, geometry: { radius: 1 } },
   });
@@ -60,7 +60,7 @@ test('pure field updates maintain spatial indexes without acquiring blocking rel
   assert.equal(removed.units.has(10), false);
 });
 
-test('navigation overlays and spatial projections belong to each returned value', () => {
+test('navigation overlays and tile queries follow each returned state version', () => {
   const owner = unit(1, [0, 0]);
   let registered = addUnit(initial(), owner);
   registered = setNavigation(registered, setOverlay(registered.navigation, 'WALK', {

@@ -1,3 +1,4 @@
+import { view } from "../../dist/core/tactical/battlefield/view.js";
 import { all as supports, lost } from '../../dist/core/tactical/battlefield/support.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,7 +29,7 @@ function projectionHarness() {
     FLY: createMap(map, 'FLY'),
   });
   const branches = [maintain, maintainFully].map(settle => ({
-    settle, state: { map, ...createBattlefieldState(map, navigation) },
+    settle, state: { map, ...createBattlefieldState(navigation) },
   }));
   return {
     map,
@@ -44,9 +45,8 @@ function projectionHarness() {
         return { lostSupports: lost(previous, settled).map(relation => ({ supportedUnitId: relation.occupant.id, supportUnitId: relation.support.id })) };
       });
       assert.deepEqual(branches[0].state, branches[1].state);
-      for (const key of ['unitsByTile']) {
-        const entries = state => [...state.spatial[key]].map(([key, ids]) => [key, [...ids]]);
-        assert.deepEqual(entries(branches[0].state), entries(branches[1].state));
+      for (let column = 0; column < map.columns; column++) {
+        assert.deepEqual(view(branches[0].state).unitsAt([0, column]), view(branches[1].state).unitsAt([0, column]));
       }
       assert.deepEqual(facts[0], facts[1]);
       return facts[0];
@@ -97,11 +97,13 @@ for (const scenario of supportCases) {
     assert.deepEqual(facts.lostSupports, scenario.lost ? relations : []);
     assert.deepEqual(h.state.units.get(scenario.id).position, previous.units.get(scenario.id).position);
     if (scenario.registrationOnly) {
-      assert.equal(h.state.spatial.unitsByTile, previous.spatial.unitsByTile);
+      assert.deepEqual(view(h.state).unitsAt([0, 1]).map(unit => unit.id), view(previous).unitsAt([0, 1]).map(unit => unit.id));
       assert.notEqual(h.state.occupancy, previous.occupancy);
     } else {
       assert.equal(h.state.occupancy, previous.occupancy);
     }
+    assert.deepEqual(view(previous).unitsAt([0, 1]).map(unit => unit.id), [1, 2]);
+    assert.deepEqual(view(h.state).unitsAt([0, 1]).map(unit => unit.id), scenario.registrationOnly ? [1, 2] : [1, 2].filter(id => id !== scenario.id));
     assert.equal(h.state.navigation, previous.navigation);
   });
 }
@@ -118,12 +120,12 @@ test('equivalent registration values preserve occupancy indexes and relation fac
     ...unit, occupancy: { registration: registration(1, 'SUPPORT') },
   })));
   assert.deepEqual(facts.lostSupports, []);
-  assert.equal(h.state.spatial.unitsByTile, previous.spatial.unitsByTile);
+  assert.deepEqual(view(h.state).unitsAt([0, 1]).map(unit => unit.id), view(previous).unitsAt([0, 1]).map(unit => unit.id));
   assert.equal(h.state.occupancy, previous.occupancy);
   assert.equal(h.state.occupancy.get(1).support, previous.occupancy.get(1).support);
 });
 
-test('Field projections maintain spatial indexes without acquiring or owning blocking relations', () => {
+test('Field unit updates preserve spatial queries without acquiring or owning blocking relations', () => {
   const h = projectionHarness();
   const blocker = unit(1, [1, 0], {
     vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ALLY' },
@@ -140,5 +142,5 @@ test('Field projections maintain spatial indexes without acquiring or owning blo
   h.commit(update(2, unit => ({ ...unit, position: [1.25, 0] })));
   assert.equal(h.state.units.get(2).blockable.blocker, null);
   assert.deepEqual(h.state.units.get(1).blocker.blocked, []);
-  assert.deepEqual([...h.state.spatial.unitsByTile.get(1)], [1, 2]);
+  assert.deepEqual(view(h.state).unitsAt([0, 1]).map(unit => unit.id), [1, 2]);
 });

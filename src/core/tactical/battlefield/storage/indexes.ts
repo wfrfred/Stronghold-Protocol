@@ -1,14 +1,9 @@
-import { World, type TilePosition } from "../../geometry/coordinate.js";
+import type { TilePosition } from "../../geometry/coordinate.js";
 import type { Unit, Id } from "../../unit/unit.js";
-import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
 import { hasOccupancy, type Registration } from "../../unit/capability/occupancy/capability.js";
 import { ref } from "../../unit/query.js";
 import { BattlefieldMap } from "../map/map.js";
 import type { TileOccupancy } from "../occupancy.js";
-
-export interface BattlefieldSpatialView {
-    readonly unitsByTile: ReadonlyMap<number, ReadonlySet<Id>>;
-}
 
 export function battlefieldTileKey(
     map: BattlefieldMap,
@@ -21,7 +16,7 @@ export function battlefieldTileKey(
         : undefined;
 }
 
-export function sameRegistration(left: Registration | null, right: Registration | null): boolean {
+function sameRegistration(left: Registration | null, right: Registration | null): boolean {
     return (
         left === right ||
         (left !== null &&
@@ -30,38 +25,6 @@ export function sameRegistration(left: Registration | null, right: Registration 
             left.tile[0] === right.tile[0] &&
             left.tile[1] === right.tile[1])
     );
-}
-
-function indexId<K, V>(index: Map<K, Set<V>>, key: K, id: V): void {
-    let ids = index.get(key);
-
-    if (ids === undefined) {
-        ids = new Set();
-        index.set(key, ids);
-    }
-
-    ids.add(id);
-}
-
-export function projectUnitsByTile(
-    map: BattlefieldMap,
-    units: ReadonlyMap<Id, Unit>,
-): Pick<BattlefieldSpatialView, "unitsByTile"> {
-    const unitsByTile = new Map<number, Set<Id>>();
-
-    for (const unit of units.values()) {
-        if (!isSpatiallyPresent(unit)) {
-            continue;
-        }
-
-        const tileKey = battlefieldTileKey(map, World.toTile(unit.position));
-
-        if (tileKey !== undefined) {
-            indexId(unitsByTile, tileKey, unit.id);
-        }
-    }
-
-    return { unitsByTile };
 }
 
 export function deriveOccupancy(
@@ -135,13 +98,4 @@ export function deriveOccupancy(
     }
 
     return occupancy;
-}
-
-export function projectBattlefieldSpatial(
-    map: BattlefieldMap,
-    units: ReadonlyMap<Id, Unit>,
-): BattlefieldSpatialView {
-    return {
-        ...projectUnitsByTile(map, units),
-    };
 }

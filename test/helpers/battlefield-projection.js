@@ -1,4 +1,3 @@
-import { projectBattlefieldSpatial } from "../../dist/core/tactical/battlefield/storage/indexes.js";
 import { ref } from "../../dist/core/tactical/unit/query.js";
 
 function occupancyFor(map, units) {
@@ -27,6 +26,5 @@ export function maintainFully(previous, content) {
         ...previous,
         ...content,
         occupancy: occupancyFor(previous.map, content.units),
-        spatial: projectBattlefieldSpatial(previous.map, content.units),
     };
 }

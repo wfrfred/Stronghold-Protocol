@@ -9,6 +9,9 @@ import { battlefieldTileKey } from "./storage/indexes.js";
 import { at } from "./occupancy.js";
 import * as support from "./support.js";
 import { ref } from "../unit/query.js";
+import { create } from "../../common/query.js";
+import { World } from "../geometry/coordinate.js";
+import { isSpatiallyPresent } from "../unit/capability/presence/capability.js";
 
 const blockingProjections = new WeakMap<ReadonlyMap<Id, Unit>, readonly BlockingRelation[]>();
 
@@ -59,9 +62,15 @@ export function view<U extends Unit>(state: State<U>): BattlefieldView<U> {
         getUnit: (id) => state.units.get(id),
         unitsAt: (position) => {
             const key = battlefieldTileKey(map, position);
-            const ids = key === undefined ? undefined : state.spatial.unitsByTile.get(key);
 
-            return ids === undefined ? [] : [...ids].map((id) => state.units.get(id)!);
+            return key === undefined
+                ? []
+                : create(() => state.units.values())
+                      .filter(isSpatiallyPresent)
+                      .filter(
+                          (unit) => battlefieldTileKey(map, World.toTile(unit.position)) === key,
+                      )
+                      .toArray();
         },
         blockerOf: (id) => {
             const unit = state.units.get(id);

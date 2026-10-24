@@ -1,3 +1,4 @@
+import { view } from "../../dist/core/tactical/battlefield/view.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -327,7 +328,8 @@ test("blocking volume: equivalent contribution changes leave the blocking projec
     };
     const result = h.commit(state => ({ ...state, units: new Map([...state.units, ...[changed].map(unit => [unit.id, unit])]) }));
     assert.equal(h.state.units.get(0).blocker.blocked, before.units.get(0).blocker.blocked);
-    assert.equal(h.state.spatial, before.spatial);
+    assert.equal(h.state.occupancy, before.occupancy);
+    assert.deepEqual(view(h.state).unitsAt([0, 0]).map(unit => unit.id), view(before).unitsAt([0, 0]).map(unit => unit.id));
     assert.equal(h.state.navigation, before.navigation);
 });
 
@@ -460,7 +462,8 @@ test("blocking capacity: replacing contribution entries without changing the res
     assert.equal(capacityOf(changed), capacityOf(owner));
     const result = h.commit(state => ({ ...state, units: new Map([...state.units, ...[changed].map(unit => [unit.id, unit])]) }));
     assert.equal(h.state.units.get(0).blocker.blocked, before.units.get(0).blocker.blocked);
-    assert.equal(h.state.spatial, before.spatial);
+    assert.equal(h.state.occupancy, before.occupancy);
+    assert.deepEqual(view(h.state).unitsAt([0, 0]).map(unit => unit.id), view(before).unitsAt([0, 0]).map(unit => unit.id));
     assert.equal(h.state.navigation, before.navigation);
     const refreshed = ({ ...h.state.units.get(0), blocker: setCapacityContribution(h.state.units.get(0).blocker, entry("positive", modifier.create({ addition: 1.1 }))) });
     assert.equal(capacityOf(refreshed), 3);
