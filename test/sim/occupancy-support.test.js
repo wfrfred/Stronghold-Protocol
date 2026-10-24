@@ -105,6 +105,28 @@ test("value-equal registration preserves the reverse index while updating the Un
     assert.equal(previous.units.get(20).vitality.hp, 100);
 });
 
+test("ordinary Unit updates do not enumerate unchanged occupancy to find lost supports", () => {
+    let enumerations = 0;
+    class MeasuredOccupancy extends Map {
+        values() {
+            enumerations++;
+            return super.values();
+        }
+    }
+    const initial = fixture();
+    const occupancy = new MeasuredOccupancy(initial.battlefield.occupancy);
+    const battle = { ...initial, battlefield: { ...initial.battlefield, occupancy } };
+    const occupant = getUnit(battle, 20);
+    const next = updateUnit(battle, {
+        ...occupant, vitality: { ...occupant.vitality, hp: 75 },
+    });
+    assert.equal(enumerations, 0);
+    assert.equal(next.battlefield.occupancy, occupancy);
+    assert.equal(getUnit(next, 20).vitality.hp, 75);
+    assert.equal(getUnit(battle, 20).vitality.hp, 100);
+    assert.deepEqual(losses(next), []);
+});
+
 test("moving and clearing registrations preserve the other slot and delete empty entries", () => {
     let current = fixture().battlefield;
     const previous = current;

@@ -57,6 +57,10 @@ export function all(field: State): readonly Relation[] {
 }
 
 export function lost(previous: State, next: State): readonly Relation[] {
+    if (previous.occupancy === next.occupancy) {
+        return [];
+    }
+
     return all(previous).filter(
         (relation) =>
             next.units.has(relation.occupant.id) &&
