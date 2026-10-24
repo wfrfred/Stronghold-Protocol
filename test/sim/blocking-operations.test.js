@@ -162,7 +162,7 @@ test("pure reverse-link maintenance does not trim the next relation before notif
     assert.deepEqual(blockedIds(battle), [20]);
 });
 
-test("a historical acquired notification continues after a nested release notification", () => {
+test("a nested release stops the old relation's acquired Hooks without leaving contributions", () => {
     let battle = fixture([holder(), target()]);
     const order = [];
     let acquiredRelation;
@@ -171,45 +171,116 @@ test("a historical acquired notification continues after a nested release notifi
         order.push("blocker acquired");
         return blocking.release(state, { id: 20 });
     }));
-    battle = onBlocker(battle, 10, "released", hook("released", state => {
+    battle = onBlocker(battle, 10, "acquired", hook("later", state => {
+        order.push("later blocker acquired");
+        return state;
+    }));
+    battle = onBlocker(battle, 10, "released", hook("released", (state, { relation }) => {
         order.push("blocker released");
+        assert.equal(relation.blocked, acquiredRelation.blocked);
         return state;
     }));
-    battle = onBlockable(battle, 20, "released", hook("released", state => {
+    battle = onBlockable(battle, 20, "released", hook("released", (state, { relation }) => {
         order.push("blockable released");
-        return state;
+        assert.equal(relation.blocked, acquiredRelation.blocked);
+        return change(state, 20, unit => ({
+            ...unit, blockable: blockable.removeVolumeContribution(unit.blockable, "relation-volume"),
+        }));
     }));
-    battle = onBlockable(battle, 20, "acquired", hook("historical", (state, { relation }) => {
+    battle = onBlockable(battle, 20, "acquired", hook("install-contribution", state => {
         order.push("blockable acquired");
-        assert.equal(relation, acquiredRelation);
-        assert.equal(ownerId(state), undefined);
+        return change(state, 20, unit => ({
+            ...unit, blockable: blockable.setVolumeContribution(unit.blockable, { id: "relation-volume", value: 1 }),
+        }));
+    }));
+    battle = acquire(battle);
+    assert.deepEqual(order, ["blocker acquired", "blocker released", "blockable released"]);
+    assert.equal(ownerId(battle), undefined);
+    assert.deepEqual(getUnit(battle, 20).blockable.volume, []);
+    assert.deepEqual(battle.events.map(({ type }) => type), ["BLOCKING_ACQUIRED", "BLOCKING_RELEASED"]);
+});
+
+test("blockable acquired Hooks also stop when their relation is released", () => {
+    let battle = fixture([holder(), target()]);
+    const calls = [];
+    battle = onBlockable(battle, 20, "acquired", hook("release", state => {
+        calls.push("blockable acquired");
+        return blocking.release(state, { id: 20 });
+    }));
+    battle = onBlockable(battle, 20, "acquired", hook("later", state => {
+        calls.push("later blockable acquired");
         return state;
     }));
     battle = acquire(battle);
-    assert.deepEqual(order, ["blocker acquired", "blocker released", "blockable released", "blockable acquired"]);
+    assert.deepEqual(calls, ["blockable acquired"]);
     assert.equal(ownerId(battle), undefined);
 });
 
-test("Hook dispatch fixes IDs and resolves same-ID replacements from the latest registration", () => {
+test("a same-pair reacquire does not resume the old relation's acquired Hooks", () => {
     let battle = fixture([holder(), target()]);
     const calls = [];
-    battle = onBlocker(battle, 10, "acquired", hook("a", state => {
-        calls.push("a");
-        state = onBlocker(state, 10, "acquired", hook("b", latest => {
-            calls.push("new b");
-            return latest;
-        }));
-        return onBlocker(state, 10, "acquired", hook("c", latest => {
-            calls.push("new c");
-            return latest;
-        }));
+    let previous;
+    battle = onBlocker(battle, 10, "acquired", hook("replace", (state, { relation }) => {
+        calls.push(["blocker first", relation.blocked]);
+        if (previous !== undefined) return state;
+        previous = relation;
+        return acquire(blocking.release(state, { id: 20 }));
     }));
-    battle = onBlocker(battle, 10, "acquired", hook("b", state => {
-        calls.push("old b");
+    battle = onBlocker(battle, 10, "acquired", hook("later", (state, { relation }) => {
+        calls.push(["blocker later", relation.blocked]);
+        return state;
+    }));
+    battle = onBlockable(battle, 20, "acquired", hook("observe", (state, { relation }) => {
+        calls.push(["blockable", relation.blocked]);
         return state;
     }));
     battle = acquire(battle);
-    assert.deepEqual(calls, ["a", "new b"]);
+    const current = getUnit(battle, 10).blocker.blocked[0];
+    assert.notEqual(current, previous.blocked);
+    assert.deepEqual(calls, [
+        ["blocker first", previous.blocked],
+        ["blocker first", current],
+        ["blocker later", current],
+        ["blockable", current],
+    ]);
+    assert.equal(ownerId(battle), 10);
+    assert.deepEqual(battle.events.map(({ type }) => type), ["BLOCKING_ACQUIRED", "BLOCKING_RELEASED", "BLOCKING_ACQUIRED"]);
+});
+
+for (const key of ["acquired", "released"]) test(`${key} fixes both sides' Hook IDs and reads current replacements and accepts`, () => {
+    let battle = fixture([holder(), target()]);
+    const calls = [];
+    const allows = state => (ownerId(state) === 10) === (key === "acquired");
+    battle = onBlocker(battle, 10, key, hook("a", state => {
+        calls.push("blocker a");
+        state = onBlocker(state, 10, key, hook("b", latest => {
+            calls.push("new blocker b");
+            return latest;
+        }, allows));
+        state = onBlocker(state, 10, key, hook("c", latest => {
+            calls.push("new blocker c");
+            return latest;
+        }));
+        state = onBlockable(state, 20, key, hook("b", latest => {
+            calls.push("new blockable b");
+            return latest;
+        }, allows));
+        return onBlockable(state, 20, key, hook("c", latest => {
+            calls.push("new blockable c");
+            return latest;
+        }));
+    }));
+    battle = onBlocker(battle, 10, key, hook("b", state => {
+        calls.push("old blocker b");
+        return state;
+    }, () => false));
+    battle = onBlockable(battle, 20, key, hook("b", state => {
+        calls.push("old blockable b");
+        return state;
+    }, () => false));
+    battle = acquire(battle);
+    if (key === "released") battle = blocking.release(battle, { id: 20 });
+    assert.deepEqual(calls, ["blocker a", "new blocker b", "new blockable b"]);
 });
 
 test("old captured Ref entries never release a same-pair relationship reestablished by a Hook", () => {
