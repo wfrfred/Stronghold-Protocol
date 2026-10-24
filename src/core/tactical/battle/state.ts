@@ -130,7 +130,7 @@ export function removeMechanism(state: State, id: MechanismId): State {
 export function updateUnit<U extends Unit>(state: State, unit: U): State {
     const previous = getUnit(state, unit.id);
 
-    if (previous === undefined) {
+    if (previous === undefined || previous === unit) {
         return state;
     }
 

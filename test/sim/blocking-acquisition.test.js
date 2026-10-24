@@ -98,9 +98,11 @@ test("a qualified ownership update preserves subsequent Hook changes", () => {
     assert.equal(ownerId(initial), undefined);
 });
 
-test("updating a missing Unit does not trigger unrelated maintenance inside a release Hook", () => {
+for (const [name, candidate] of [
+    ["a missing Unit", () => target(99)],
+    ["the current Unit object", state => getUnit(state, 10)],
+]) test(`updating ${name} does not trigger unrelated maintenance inside a release Hook`, () => {
     let battle = fixture([holder(10, { capacity: 3 }), target(20), target(21), target(22)]);
-    const missing = target(99);
     const released = [];
     battle = change(battle, 10, unit => ({
         ...unit,
@@ -108,7 +110,7 @@ test("updating a missing Unit does not trigger unrelated maintenance inside a re
             released.push(relation.blocked.id);
             if (relation.blocked.id !== 22) return state;
             assert.deepEqual(blockedIds(state), [20, 21]);
-            assert.equal(updateUnit(state, missing), state);
+            assert.equal(updateUnit(state, candidate(state)), state);
             return capacity(state, 10, 2);
         })),
     }));
