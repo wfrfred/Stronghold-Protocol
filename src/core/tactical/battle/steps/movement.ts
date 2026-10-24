@@ -5,11 +5,12 @@ import {
 } from "../../unit/capability/route/capability.js";
 import * as route from "../../unit/capability/route/operations.js";
 import { hasLocomotion, type Locomotion } from "../../unit/capability/locomotion/capability.js";
+import { hasBlockable } from "../../unit/capability/blocking/blockable.js";
 import * as locomotion from "../../unit/capability/locomotion/operations.js";
 import * as units from "../../unit/query.js";
 import type { Id, Unit } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
-import { appendEvents, battlefieldView, getUnit, type State as BattleState } from "../state.js";
+import { appendEvents, getUnit, type State as BattleState } from "../state.js";
 import { leave } from "../execution/unit.js";
 import { sort } from "../../../common/collection.js";
 
@@ -83,20 +84,39 @@ export function advanceMovement(
         if (unit?.lifecycle !== "PRESENT") {
             continue;
         }
-        if (route.isCompleted(unit.route)) {
-            if (battlefieldView(battle).blockerOf(unit.id) === undefined) {
-                battle = appendEvents(battle, [
-                    {
-                        type: "ROUTE_COMPLETED",
-                        unitId: unit.id,
-                        tick: battle.tick,
-                    },
-                ]);
-                battle = leave(battle, unit.id, "SCRIPT");
-            }
-        } else if (hasLocomotion(unit)) {
+        if (
+            !route.isCompleted(unit.route) &&
+            (!hasBlockable(unit) || unit.blockable.blocker === null) &&
+            hasLocomotion(unit)
+        ) {
             battle = advanceLocomotion(battle, unit, routeMoveMultiplier);
         }
+    }
+
+    return battle;
+}
+
+export function resolveRouteCompletion(battle: BattleState): BattleState {
+    const candidates = sort(
+        units.all(battle).filter(hasRoute).map(units.ref),
+        (left, right) => left.id - right.id,
+    );
+
+    for (const ref of candidates) {
+        const unit = units.get(battle, ref);
+
+        if (
+            unit?.lifecycle !== "PRESENT" ||
+            !route.isCompleted(unit.route) ||
+            (hasBlockable(unit) && unit.blockable.blocker !== null)
+        ) {
+            continue;
+        }
+
+        battle = appendEvents(battle, [
+            { type: "ROUTE_COMPLETED", unitId: unit.id, tick: battle.tick },
+        ]);
+        battle = leave(battle, unit.id, "SCRIPT");
     }
 
     return battle;

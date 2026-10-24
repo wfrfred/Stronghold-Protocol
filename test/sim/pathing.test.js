@@ -2,7 +2,10 @@ import { getLostSupports } from '../../dist/core/tactical/battlefield/support/re
 import * as route from '../../dist/core/tactical/unit/capability/route/operations.js';
 import * as locomotion from '../../dist/core/tactical/unit/capability/locomotion/operations.js';
 import * as units from '../../dist/core/tactical/unit/query.js';
-import { registerUnit, updateUnit } from '../../dist/core/tactical/battle/state.js';
+import { createBattleState, registerUnit, updateUnit } from '../../dist/core/tactical/battle/state.js';
+import { create as createField } from '../../dist/core/tactical/battlefield/state.js';
+import * as blocking from '../../dist/core/tactical/battle/blocking/operations.js';
+import { blockedIds, fixture as blockingFixture } from '../helpers/blocking.js';
 import { fixtureBattle } from "../helpers/unit.js";
 import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
 import { test } from 'node:test';
@@ -420,17 +423,16 @@ test('core selective projection retains untouched collections, indexes and route
   assert.equal(h.state.mechanisms, previous.mechanisms);
   assert.equal(h.state.spatial, previous.spatial);
   assert.equal(h.state.supportRelations, previous.supportRelations);
-  assert.equal(h.state.blockingRelations, previous.blockingRelations);
+  assert.equal('blockingRelations' in h.state, false);
   assert.equal(h.state.navigation, previous.navigation);
   assert.equal(h.state.units.get(1).route.main, progress);
   assert.equal(h.state.units.get([...h.state.spatial.unitsByTile.get(0)][0]).vitality.hp, 90);
   assert.equal(previous.units.get(1).vitality.hp, 100);
 });
 
-test('core selective and full projection release ground blocking when a blocker enters an impassable tile', () => {
+test('complete battle updates release ground blocking when a blocker enters an impassable tile', () => {
   const map = createBattlefieldMap(1, 4, ['ALL', 'FLY_ONLY', 'WALK_ONLY', 'NONE']
     .map(passableMask => coreGround({ passableMask })));
-  const h = battlefieldProjectionHarness(1, 4, map);
   const blocker = projectionUnit(10, [0, 0], {
     vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ALLY' }, blocker: { capacity: 1, geometry: { radius: 1 } },
   });
@@ -438,85 +440,81 @@ test('core selective and full projection release ground blocking when a blocker 
     vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, blockable: { volume: 1 },
     layer: { type: 'GROUND' },
   });
-  const relations = [{ blockerUnitId: 10, blockedUnitId: 11 }];
-  h.commit(state => ({ ...state, units: new Map([...state.units, ...[blocker, enemy].map(unit => [unit.id, unit])]) }));
-  h.commit(state => ({ ...state, blockingRelations: relations }));
-  const retained = h.state.blockingRelations;
-  h.commit(state => ({ ...state, units: new Map([...state.units, ...[{ ...blocker, position: [2, 0] }].map(unit => [unit.id, unit])]) }));
-  assert.equal(h.state.blockingRelations, retained);
+  const initial = registerUnit(registerUnit(createBattleState(createField({ map })), blocker), enemy);
+  const acquired = blocking.search(initial, units.ref(blocker));
+  const entry = acquired.battlefield.units.get(10).blocker.blocked[0];
+  assert.deepEqual(blockedIds(acquired), [11]);
+  const passable = updateUnit(acquired, { ...acquired.battlefield.units.get(10), position: [2, 0] });
+  assert.equal(passable.battlefield.units.get(10).blocker.blocked[0], entry);
 
   for (const position of [[1, 0], [3, 0], [-1, 0]]) {
-    h.commit(state => ({ ...state, units: new Map([...state.units, ...[blocker].map(unit => [unit.id, unit])]), blockingRelations: relations }));
-    assert.deepEqual(h.state.blockingRelations, relations);
-    h.commit(state => ({ ...state, units: new Map([...state.units, ...[{ ...blocker, position }].map(unit => [unit.id, unit])]) }));
-    assert.deepEqual(h.state.blockingRelations, []);
-    h.commit(state => ({ ...state, blockingRelations: relations }));
-    assert.deepEqual(h.state.blockingRelations, []);
+    const changed = updateUnit(acquired, { ...acquired.battlefield.units.get(10), position });
+    assert.deepEqual(blockedIds(changed), []);
+    assert.deepEqual(blockedIds(acquired), [11]);
   }
-  h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
-    ...blocker, position: [1e30, 0], spatialPresence: { present: false },
-  }].map(unit => [unit.id, unit])]) }));
-  h.commit(state => ({ ...state, blockingRelations: relations }));
-  assert.deepEqual(h.state.blockingRelations, []);
+  const hidden = updateUnit(acquired, {
+    ...acquired.battlefield.units.get(10), position: [1e30, 0], spatialPresence: { present: false },
+  });
+  assert.deepEqual(blockedIds(hidden), []);
 });
 
-test('core selective and full projection preserve relation history and reacquire after same-position release', () => {
+test('selective and full field projection preserve support cleanup independently of blocking', () => {
   const h = battlefieldProjectionHarness();
-  const blocker = projectionUnit(10, [1, 0], {
-    vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ALLY' }, blocker: { capacity: 2, geometry: { radius: 1 } },
-  }, { spatialPresence: { present: true }, occupancy: { claims: [projectionClaim(1)] } });
-  const enemy = projectionUnit(11, [1.1, 0], {
-    vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, blockable: { volume: 1 }, layer: { type: 'GROUND' },
-  }, { spatialPresence: { present: true } });
+  const rider = projectionUnit(10, [1, 0], {}, {
+    spatialPresence: { present: true }, occupancy: { claims: [projectionClaim(1)] },
+  });
   const platform = projectionUnit(12, [1, 0], {
     tileBinding: createTileBindingDefinition({ buildableType: 'ALL', heightType: 'HIGHLAND' }),
   }, { spatialPresence: { present: true }, occupancy: { claims: [projectionClaim(1, 'PRESENT', 'SUPPORT')] } });
-  const blocking = [{ blockerUnitId: 10, blockedUnitId: 11 }];
-  h.commit(state => ({ ...state, units: new Map([...state.units, ...[blocker, enemy, platform].map(unit => [unit.id, unit])]) }));
-  h.commit(state => ({ ...state, blockingRelations: blocking }));
-  h.commit(state => ({ ...state, units: new Map([...state.units, ...[{ ...state.units.get(11), position: Object.freeze([4, 1]) }].map(unit => [unit.id, unit])]) }));
-  assert.deepEqual(h.state.blockingRelations, blocking);
-  h.commit(state => ({ ...state, supportRelations: [{ supportedUnitId: 10, supportUnitId: 12 }] }));
-  assert.deepEqual(h.state.blockingRelations, []);
-  const reservation = h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
+  const relation = { supportedUnitId: 10, supportUnitId: 12 };
+  h.commit(state => ({ ...state, units: new Map([[10, rider], [12, platform]]), supportRelations: [relation] }));
+  const reservation = h.commit(state => ({ ...state, units: new Map([...state.units, [12, {
     ...state.units.get(12), occupancy: { claims: [projectionClaim(1, 'RESERVATION', 'SUPPORT')] },
-  }].map(unit => [unit.id, unit])]) }));
-  assert.deepEqual(reservation.lostSupports, [{ supportedUnitId: 10, supportUnitId: 12 }]);
-  h.commit(state => ({ ...state, units: new Map([...state.units, ...[platform].map(unit => [unit.id, unit])]), supportRelations: [{ supportedUnitId: 10, supportUnitId: 12 }] }));
-  const lost = h.commit(state => ({ ...state, units: new Map([...state.units].filter(([id]) => id !== 12)) }), 4);
-  assert.deepEqual(lost.lostSupports, [{ supportedUnitId: 10, supportUnitId: 12 }]);
-  h.commit(state => ({ ...state, blockingRelations: blocking }));
-  h.commit(state => ({ ...state, blockingRelations: state.blockingRelations.filter(relation => relation.blockerUnitId !== 11 && relation.blockedUnitId !== 11) }));
-  assert.deepEqual(h.state.blockingRelations, []);
-  h.commit(state => ({ ...state, blockingRelations: blocking }));
-  h.commit(state => ({ ...state, units: new Map([...state.units, ...[{ ...state.units.get(11), vitality: { ...state.units.get(11).vitality, hp: 0 } }].map(unit => [unit.id, unit])]) }));
-  assert.deepEqual(h.state.blockingRelations, []);
-  assert.ok(h.state.spatial.unitsByTile.get(9).has(11));
-  const unblockableRule = { id: 'unblockable', allows: () => false };
+  }]]) }));
+  assert.deepEqual(reservation.lostSupports, [relation]);
+  h.commit(state => ({ ...state, units: new Map([...state.units, [12, platform]]), supportRelations: [relation] }));
+  const removed = h.commit(state => ({ ...state, units: new Map([...state.units].filter(([id]) => id !== 12)) }));
+  assert.deepEqual(removed.lostSupports, [relation]);
+  assert.deepEqual(h.state.supportRelations, []);
+  assert.equal('blockingRelations' in h.state, false);
+});
+
+test('complete battle updates preserve relation history and release on current eligibility changes', () => {
+  const blocker = projectionUnit(10, [1, 0], {
+    vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ALLY' }, blocker: { capacity: 2, geometry: { radius: 1 } },
+  });
+  const enemy = projectionUnit(11, [1.1, 0], {
+    vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, blockable: { volume: 1 }, layer: { type: 'GROUND' },
+  });
+  const acquired = blocking.search(blockingFixture([blocker, enemy]), units.ref(blocker));
+  const first = acquired.battlefield.units.get(10).blocker.blocked[0];
+  const moved = updateUnit(acquired, { ...acquired.battlefield.units.get(11), position: [4, 1] });
+  assert.equal(moved.battlefield.units.get(10).blocker.blocked[0], first);
+  const released = blocking.release(acquired, units.ref(enemy));
+  assert.deepEqual(blockedIds(released), []);
+  const reacquired = blocking.search(released, units.ref(blocker));
+  assert.deepEqual(blockedIds(reacquired), [11]);
+  assert.notEqual(reacquired.battlefield.units.get(10).blocker.blocked[0], first);
+
   const mutations = [
+    unit => ({ ...unit, vitality: { ...unit.vitality, hp: 0 } }),
     unit => ({ ...unit, allegiance: { side: 'ALLY' } }),
     unit => ({ ...unit, layer: { type: 'AIR' } }),
     unit => ({ ...unit, blockable: blockable.setVolumeContribution(unit.blockable, { id: 'larger', value: 2 }) }),
-    unit => ({ ...unit, blockable: blockable.setRule(unit.blockable, unblockableRule) }),
+    unit => ({ ...unit, blockable: blockable.setRule(unit.blockable, { id: 'unblockable', allows: () => false }) }),
   ];
   for (const mutate of mutations) {
-    h.commit(state => ({ ...state, units: new Map([...state.units, ...[enemy].map(unit => [unit.id, unit])]), blockingRelations: blocking }));
-    h.commit(state => ({ ...state, units: new Map([...state.units, ...[mutate(state.units.get(11))].map(unit => [unit.id, unit])]) }));
-    assert.deepEqual(h.state.blockingRelations, []);
+    const changed = updateUnit(acquired, mutate(acquired.battlefield.units.get(11)));
+    assert.deepEqual(blockedIds(changed), []);
+    assert.deepEqual(blockedIds(acquired), [11]);
   }
   for (const blockerState of [
-    { ...blocker.blocker, capacity: contribution.set([], { id: 'capacity-zero', value: [modifier.create({ finalScaler: 0 })] }) },
-    setBlockerRule(blocker.blocker, { id: 'cannot-block', allows: () => false }),
+    { ...acquired.battlefield.units.get(10).blocker, capacity: contribution.set([], { id: 'capacity-zero', value: [modifier.create({ finalScaler: 0 })] }) },
+    setBlockerRule(acquired.battlefield.units.get(10).blocker, { id: 'cannot-block', allows: () => false }),
   ]) {
-    h.commit(state => ({ ...state, units: new Map([...state.units, ...[enemy, blocker].map(unit => [unit.id, unit])]), blockingRelations: blocking }));
-    h.commit(state => ({ ...state, units: new Map([...state.units, ...[{ ...state.units.get(10), blocker: blockerState }].map(unit => [unit.id, unit])]) }));
-    assert.deepEqual(h.state.blockingRelations, []);
+    const changed = updateUnit(acquired, { ...acquired.battlefield.units.get(10), blocker: blockerState });
+    assert.deepEqual(blockedIds(changed), []);
   }
-  h.commit(state => ({ ...state, units: new Map([...state.units, ...[enemy, blocker].map(unit => [unit.id, unit])]), blockingRelations: blocking }));
-  const spatial = h.state.spatial;
-  h.commit(state => ({ ...state, units: new Map([...state.units].map(([id, unit]) => [id, id === 11 ? { ...unit, position: enemy.position } : unit])), blockingRelations: (state.blockingRelations).filter(relation => relation.blockerUnitId !== 11 && relation.blockedUnitId !== 11) }));
-  assert.deepEqual(h.state.blockingRelations, blocking);
-  assert.equal(h.state.spatial, spatial);
 });
 
 test('core selective and full projection reject invalid final references and claims atomically', () => {

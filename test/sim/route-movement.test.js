@@ -1,10 +1,10 @@
-import { maintain } from '../../dist/core/tactical/battlefield/storage/state.js';
+import { advance as advanceBlocking, search as searchBlocking } from "../../dist/core/tactical/battle/blocking/operations.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
     setBattlefield, battlefieldView, createBattleState, getUnit, registerUnit,
 } from "../../dist/core/tactical/battle/state.js";
-import { advanceMovement } from "../../dist/core/tactical/battle/steps/movement.js";
+import { advanceMovement, resolveRouteCompletion } from "../../dist/core/tactical/battle/steps/movement.js";
 import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { create } from "../../dist/core/tactical/battlefield/state.js";
@@ -14,7 +14,7 @@ import { Map as NavigationMap } from "../../dist/core/tactical/battlefield/navig
 import { create as createNavigation, nextPoint as nextNavigationPoint } from "../../dist/core/tactical/battlefield/navigation/state.js";
 import * as routeOperations from "../../dist/core/tactical/unit/capability/route/operations.js";
 
-const step = battle => advanceMovement(battle, { routeMoveMultiplier: 1 });
+const step = battle => resolveRouteCompletion(advanceBlocking(advanceMovement(battle, { routeMoveMultiplier: 1 })));
 const cell = overrides => ({
     passable: true, cost: 1, departures: { UP: true, RIGHT: true, DOWN: true, LEFT: true }, ...overrides,
 });
@@ -81,7 +81,7 @@ test("Main completion stops motion while blocked and produces one event only whe
     state = registerUnit(state, {
         ...enemy, locomotion: { ...enemy.locomotion, velocity: [1, 0] },
     });
-    state = setBattlefield(state, maintain(state.battlefield, { ...state.battlefield, blockingRelations: [{ blockerUnitId: 1, blockedUnitId: 2 }] }));
+    state = searchBlocking(state, { id: 1 });
     const first = step(state);
     assert.equal(getUnit(first, 2).route.main.phase.type, "COMPLETED");
     assert.deepEqual(getUnit(first, 2).position, [0, 0]);
@@ -95,7 +95,7 @@ test("Main completion stops motion while blocked and produces one event only whe
     assert.equal(step(departed).events.filter(event => event.type === "ROUTE_COMPLETED").length, 1);
 });
 
-test("Main departure callbacks can remove a later candidate before its route executes", () => {
+test("Main departure callbacks can remove a later departure candidate after the movement phase", () => {
     let state = battle();
     state = registerUnit(state, unit(state, 1, {
         route: route({ endPosition: [0, 0] }),
@@ -108,7 +108,7 @@ test("Main departure callbacks can remove a later candidate before its route exe
     assert.equal(getUnit(advanced, 1), undefined);
     assert.equal(getUnit(advanced, 2), undefined);
     assert.deepEqual(advanced.events.filter(event => event.type === "ROUTE_COMPLETED").map(event => event.unitId), [1]);
-    assert.equal(advanced.events.some(event => event.type === "ROUTE"), false);
+    assert.equal(advanced.events.some(event => event.type === "ROUTE"), true);
 });
 
 test("a route wait skips Locomotion without clearing its history velocity", () => {

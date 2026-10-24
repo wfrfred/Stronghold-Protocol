@@ -1,3 +1,4 @@
+import { search as searchBlocking } from "../../dist/core/tactical/battle/blocking/operations.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createRng } from "../../dist/core/common/rng.js";
@@ -185,18 +186,16 @@ test("standard filters compose eligibility and source exclusion explicitly", () 
 });
 
 test("blockedFirst preserves blocking relation order and then uses the next comparator", () => {
-    const source = unit(0);
-    const initial = battle(source, target(1), target(2), target(3), target(4));
-    const current = {
-        ...initial,
-        battlefield: {
-            ...initial.battlefield,
-            blockingRelations: [
-                { blockerUnitId: 0, blockedUnitId: 3 },
-                { blockerUnitId: 0, blockedUnitId: 2 },
-            ],
-        },
+    const source = unit(0, {
+        allegiance: { side: "ALLY" }, blocker: { capacity: 2, geometry: { radius: 1 } },
+    });
+    const definition = {
+        allegiance: { side: "ENEMY" }, blockable: { volume: 1 }, layer: { type: "GROUND" },
     };
+    const initial = battle(source, target(1),
+        { ...target(2, definition), position: [0.5, 0] },
+        { ...target(3, definition), position: [0.25, 0] }, target(4));
+    const current = searchBlocking(initial, ref(source));
 
     assert.deepEqual(select(current, request(source, {
         selector: selectors.first(4, compare.combine(compare.blockedFirst, compare.distance)),

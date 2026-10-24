@@ -3,6 +3,9 @@ import { assertPositiveSafeInteger, assertSafeInteger } from "../../../../common
 import * as registry from "../../hook/hook.js";
 import * as contribution from "../../contribution/contribution.js";
 import type { Unit } from "../../unit.js";
+import type { Ref } from "../../../../common/ref.js";
+import type { Blocker } from "./blocker.js";
+import type { Hook, Key } from "../../../battle/blocking/hook.js";
 
 export interface Definition {
     readonly volume: number;
@@ -14,8 +17,11 @@ export interface Rule {
 }
 
 export interface State {
+    readonly blocker: Ref<Unit & Blocker> | null;
     readonly volume: readonly contribution.Contribution<number>[];
     readonly rules: readonly Rule[];
+    readonly acquired: readonly Hook<Unit & Blockable>[];
+    readonly released: readonly Hook<Unit & Blockable>[];
 }
 
 export interface Blockable {
@@ -32,7 +38,22 @@ export function hasBlockable<U extends Unit>(unit: U): unit is U & Blockable {
 export function initialize(battle: BattleState, definition: Definition): Result<State> {
     assertPositiveSafeInteger(definition.volume, "blocking volume");
 
-    return { state: battle, value: { volume: [], rules: [] } };
+    return {
+        state: battle,
+        value: { blocker: null, volume: [], rules: [], acquired: [], released: [] },
+    };
+}
+
+export function setHook(state: State, key: Key, hook: Hook<Unit & Blockable>): State {
+    const entries = registry.set(state[key], hook);
+
+    return entries === state[key] ? state : { ...state, [key]: entries };
+}
+
+export function removeHook(state: State, key: Key, id: string): State {
+    const entries = registry.remove(state[key], id);
+
+    return entries === state[key] ? state : { ...state, [key]: entries };
 }
 
 export function setRule(state: State, rule: Rule): State {

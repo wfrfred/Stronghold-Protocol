@@ -1,3 +1,4 @@
+import { advance as advanceBlocking } from "../../dist/core/tactical/battle/blocking/operations.js";
 import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { fixtureBattle, fixtureDefinition } from "../helpers/unit.js";
 import { ref as activationRef } from "../../dist/core/tactical/unit/capability/skill/activation.js";
@@ -58,7 +59,7 @@ function setup(configuration = {}, targets = [], options = {}) {
     const content = create(prepared, options);
     const unit = initialize({ id: 0, position: [0, 0], definition: content.definition });
     const initial = createBattleState(fixtureBattlefieldState([unit, ...targets]));
-    return { prepared, ...content, initial, state: enter(initial, 0) };
+    return { prepared, ...content, initial, state: advanceBlocking(enter(initial, 0)) };
 }
 const save = (state, fields) => updateUnit(state, { ...getUnit(state, 0), ...fields });
 const hp = (state, amount) => save(state, { vitality: { ...getUnit(state, 0).vitality, hp: amount } });

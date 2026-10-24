@@ -43,8 +43,7 @@ import { setHook as setHealingHook, removeHook as removeHealingHook } from '../.
 import { validateShape } from '../../dist/core/tactical/geometry/shape.js';
 import { fromTiles } from '../../dist/core/tactical/geometry/range.js';
 import { contains, overlaps } from '../../dist/core/tactical/geometry/intersection.js';
-import { updateBlockingRelations } from '../../dist/core/tactical/battlefield/blocking/relations.js';
-import { projectUnitsByTile } from '../../dist/core/tactical/battlefield/storage/indexes.js';
+import { search as searchBlocking } from '../../dist/core/tactical/battle/blocking/operations.js';
 import { hasLocomotion } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
 import { initialize as initializeRouteState, hasRoute } from '../../dist/core/tactical/unit/capability/route/capability.js';
 import { createUnitPlacementDefinition, instantiateUnitPlacement } from '../../dist/core/tactical/battle/creation/placement.js';
@@ -288,7 +287,7 @@ test('core spatial presence preserves earlier unit values while removing only sp
   assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 2]).map(unit => unit.id), [1, 2]);
 });
 
-test('core removal facts share the latest unit while updates preserve retained battlefield snapshots', () => {
+test('core removal facts retain the latest leaving state while preserving battlefield snapshots', () => {
   let runtime = presenceBattlefield();
   const unit = presenceUnit(1, [2, 0]);
   runtime = addUnit(runtime, unit);
@@ -303,10 +302,11 @@ test('core removal facts share the latest unit while updates preserve retained b
   const removed = removeBattleUnit(updateBattleUnit(createBattleState(runtime), updated), 1, 'DEATH');
   runtime = removed.battlefield;
   assert.deepEqual(removed.removedUnits, [{ unitId: 1, reason: 'DEATH', unit: {
-    ...updated, position: Object.freeze([3, 0]),
+    ...updated, lifecycle: 'LEAVING', position: Object.freeze([3, 0]),
   } }]);
   assert.equal(removed.removedUnits[0].unit.definition, unit.definition);
-  assert.equal(removed.removedUnits[0].unit, updated);
+  assert.equal(removed.removedUnits[0].unit.vitality, updated.vitality);
+  assert.equal(removed.removedUnits[0].unit.position, updated.position);
   assert.deepEqual(viewBattlefield(runtime).unitIds, []);
   assert.equal(retained.getUnit(1), unit);
   assert.equal(removed.removedUnits[0].unit.vitality.hp, 20);
@@ -408,9 +408,9 @@ test('core unit initialization pairs every declared capability with its initiali
   assert.deepEqual(unit.occupancy.claims, []);
   assert.deepEqual(unit.targetable.restrictions, []);
   assert.deepEqual(unit.tileBinding, {});
-  assert.deepEqual(unit.blocker, { capacity: [], geometry: { radius: 0.7 }, rules: [] });
+  assert.deepEqual(unit.blocker, { capacity: [], geometry: { radius: 0.7 }, rules: [], blocked: [], acquired: [], released: [] });
   assert.equal(resolveCapacity(unit.definition.blocker, unit.blocker), 2);
-  assert.deepEqual(unit.blockable, { volume: [], rules: [] });
+  assert.deepEqual(unit.blockable, { volume: [], rules: [], blocker: null, acquired: [], released: [] });
 
   const next = initializeUnit(battle, { id: 2, definition, position: [0, 0] }).value;
   assert.notEqual(next.vitality, unit.vitality);
@@ -702,8 +702,8 @@ test('core blocking uses current state radius and includes center-distance equal
     hitbox: { shape: { type: 'CIRCLE', offset: [0, 0], radius: 10 } },
   }), position: [1, 0] });
   const update = current => {
-    const units = new Map([[1, current], [2, blocked]]);
-    return updateBlockingRelations(map, units, [], projectUnitsByTile(map, units).unitsByTile);
+    const battle = createBattleState(addUnits(createFieldState({ map }), [current, blocked]));
+    return viewBattlefield(searchBlocking(battle, unitRef(current)).battlefield).blockingRelations;
   };
   assert.deepEqual(update(blocker), []);
   const enlarged = { ...blocker, blocker: { ...blocker.blocker, geometry: ({ radius: 1 }) } };

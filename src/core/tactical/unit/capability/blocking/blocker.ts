@@ -7,6 +7,9 @@ import {
 import * as contribution from "../../contribution/contribution.js";
 import * as attribute from "../../contribution/attribute.js";
 import type { Unit } from "../../unit.js";
+import type { Ref } from "../../../../common/ref.js";
+import type { Blockable } from "./blockable.js";
+import type { Hook, Key } from "../../../battle/blocking/hook.js";
 
 export interface Definition {
     readonly capacity: number;
@@ -19,9 +22,12 @@ export interface Rule {
 }
 
 export interface State {
+    readonly blocked: readonly Ref<Unit & Blockable>[];
     readonly capacity: readonly contribution.Contribution<readonly attribute.Modifier[]>[];
     readonly geometry: { readonly radius: number };
     readonly rules: readonly Rule[];
+    readonly acquired: readonly Hook<Unit & Blocker>[];
+    readonly released: readonly Hook<Unit & Blocker>[];
 }
 
 export interface Blocker {
@@ -42,11 +48,26 @@ export function initialize(battle: BattleState, definition: Definition): Result<
     return {
         state: battle,
         value: {
+            blocked: [],
             capacity: [],
             geometry: definition.geometry,
             rules: [],
+            acquired: [],
+            released: [],
         },
     };
+}
+
+export function setHook(state: State, key: Key, hook: Hook<Unit & Blocker>): State {
+    const entries = registry.set(state[key], hook);
+
+    return entries === state[key] ? state : { ...state, [key]: entries };
+}
+
+export function removeHook(state: State, key: Key, id: string): State {
+    const entries = registry.remove(state[key], id);
+
+    return entries === state[key] ? state : { ...state, [key]: entries };
 }
 
 export function setRule(state: State, rule: Rule): State {

@@ -10,7 +10,6 @@ import {
     registerUnit,
     removeUnit,
     updateUnit,
-    updateUnits,
 } from "../../dist/core/tactical/battle/state.js";
 
 const unit = (id, position = [0, 0]) =>
@@ -32,7 +31,7 @@ test("battle state: each returned version exposes completed updates and retains 
     assert.equal(published.getUnit(1), first);
     assert.equal(published.getUnit(2), second);
     assert.deepEqual(initial.removedUnits, []);
-    assert.deepEqual(removed.removedUnits, [{ unitId: 1, reason: "SCRIPT", unit: first }]);
+    assert.deepEqual(removed.removedUnits, [{ unitId: 1, reason: "SCRIPT", unit: { ...first, lifecycle: "LEAVING" } }]);
 });
 
 test("battle state: independent branches keep their own registrations and removals", () => {
@@ -80,14 +79,17 @@ test("battle state: facts, event prefixes and execution progress travel through 
     assert.equal(initial.execution.rngState, 0);
 });
 
-test("battle state: explicit batch updates do not register missing units", () => {
+test("battle state: unit updates do not register missing units", () => {
     const first = unit(1),
         second = unit(2);
     const initial = fixture(first, second);
     const snapshot = battlefieldView(initial);
     const moved = { ...first, position: [3, 0] },
         spawned = unit(8);
-    const changed = registerUnit(updateUnits(initial, [moved, second, spawned]), spawned);
+    const movedState = updateUnit(initial, moved);
+    const ignored = updateUnit(updateUnit(movedState, second), spawned);
+    assert.equal(ignored, movedState);
+    const changed = registerUnit(ignored, spawned);
     assert.equal(getUnit(changed, 1), moved);
     assert.equal(getUnit(changed, 8), spawned);
     assert.equal(snapshot.getUnit(1), first);

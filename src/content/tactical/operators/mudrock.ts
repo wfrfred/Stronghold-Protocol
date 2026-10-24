@@ -20,6 +20,8 @@ import { calculateDamage } from "../../../core/tactical/battle/damage/calculate.
 import { applyDamage } from "../../../core/tactical/battle/damage/apply.js";
 import type { DamageRequest } from "../../../core/tactical/battle/damage/contract.js";
 import { ref as unitRef } from "../../../core/tactical/unit/query.js";
+import { blocked } from "../../../core/tactical/battle/blocking/query.js";
+import { hasBlocker } from "../../../core/tactical/unit/capability/blocking/blocker.js";
 import type { Profile } from "../../../data/arknights/operator.js";
 import { secondsToTicks } from "../../../data/arknights/tick.js";
 import { createRng } from "../../../core/common/rng.js";
@@ -221,7 +223,8 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
                             : 1;
                         const blockingScale =
                             sourceId !== null &&
-                            battlefieldView(state).blockedBy(unit.id).includes(sourceId)
+                            hasBlocker(unit) &&
+                            blocked(state, unitRef(unit)).some((ref) => ref.id === sourceId)
                                 ? blockedDamageScale
                                 : 1;
 

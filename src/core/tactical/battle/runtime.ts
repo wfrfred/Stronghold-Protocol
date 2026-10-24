@@ -14,7 +14,8 @@ import type { Input, Command, Result, Snapshot, Step } from "./contract.js";
 import { prepare as prepareCombat, advance as advanceCombat } from "./steps/combat.js";
 import { advanceSpawning } from "./steps/spawning.js";
 import { resolveDeploymentCommands } from "./deployment/operations.js";
-import { advanceMovement, advanceRouteCommands } from "./steps/movement.js";
+import { advanceMovement, advanceRouteCommands, resolveRouteCompletion } from "./steps/movement.js";
+import { advance as advanceBlocking } from "./blocking/operations.js";
 import { advanceProjectiles } from "./steps/projectiles.js";
 import { ref as projectileRef } from "../battlefield/projectile/operations.js";
 import { advanceElements } from "./steps/elemental.js";
@@ -181,6 +182,10 @@ export class BattleRuntime {
         state = advanceMovement(state, {
             routeMoveMultiplier: this.#input.routeMoveMultiplier,
         });
+
+        state = advanceBlocking(state);
+
+        state = resolveRouteCompletion(state);
 
         state = {
             ...state,

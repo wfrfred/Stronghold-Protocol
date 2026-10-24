@@ -18,12 +18,14 @@ test("direct Effect definitions type host capabilities, private state and immuta
         `
 import { initialize } from ${module("unit/initialize")};
 import type { Unit } from ${module("unit/unit")};
+import type { Ref } from ${module("../common/ref")};
 import type { State as BattleState } from ${module("battle/state")};
 import type { Vitality } from ${module("unit/capability/vitality/capability")};
 import { setMaxHpContribution } from ${module("unit/capability/vitality/capability")};
 import { setAttackContribution, type Input as AttackInput, type Offense } from ${module("unit/capability/offense/capability")};
-import { setCapacityContribution, canBlock, type Rule as BlockerRule, type Blocker } from ${module("unit/capability/blocking/blocker")};
-import { setVolumeContribution, canBeBlocked, type Rule as BlockableRule, type Blockable } from ${module("unit/capability/blocking/blockable")};
+import { setCapacityContribution, canBlock, setHook as setBlockerHook, type Rule as BlockerRule, type Blocker } from ${module("unit/capability/blocking/blocker")};
+import { setVolumeContribution, canBeBlocked, setHook as setBlockableHook, type Rule as BlockableRule, type Blockable } from ${module("unit/capability/blocking/blockable")};
+import { blockerOf, blocked, usedCapacity } from ${module("battle/blocking/query")};
 import type { Locomotion } from ${module("unit/capability/locomotion/capability")};
 import { setSpeedContribution } from ${module("unit/capability/locomotion/operations")};
 import type { Route, Progress } from ${module("unit/capability/route/capability")};
@@ -104,6 +106,32 @@ const blockerRule:BlockerRule={id:'blocker',allows:self=>self.blocker.capacity.l
 const blockableRule:BlockableRule={id:'blockable',allows:self=>self.blockable.volume.length===0};
 canBlock(capabilityHost);
 canBeBlocked(capabilityHost);
+const blockedRefs:readonly Ref<Unit & Blockable>[]=capabilityHost.blocker.blocked;
+const blockerRef:Ref<Unit & Blocker>|null=capabilityHost.blockable.blocker;
+const owner:Ref<Unit & Blocker>|undefined=blockerOf(battle,unitRef(capabilityHost));
+const targets:readonly Ref<Unit & Blockable>[]=blocked(battle,unitRef(capabilityHost));
+setBlockerHook(capabilityHost.blocker,'acquired',{
+ id:'blocker-host',
+ invoke(current,context){
+  const capacity:number=usedCapacity(current,context.host);
+  // @ts-expect-error a Blocker Hook does not prove its host has Blockable.
+  blockerOf(current,context.host);
+  return {state:current,value:undefined};
+ },
+});
+setBlockableHook(capabilityHost.blockable,'released',{
+ id:'blockable-host',
+ invoke(current,context){
+  const blocker:Ref<Unit & Blocker>|undefined=blockerOf(current,context.host);
+  // @ts-expect-error a Blockable Hook does not prove its host has Blocker.
+  usedCapacity(current,context.host);
+  return {state:current,value:undefined};
+ },
+});
+// @ts-expect-error blocking ownership queries require Blockable identity.
+blockerOf(battle,unitRef(bare));
+// @ts-expect-error reverse blocking queries require Blocker identity.
+blocked(battle,unitRef(bare));
 // @ts-expect-error blocking queries require the capability at the call boundary.
 canBlock(bare);
 // @ts-expect-error blockable queries require the capability at the call boundary.

@@ -41,7 +41,7 @@ test('pure transitions preserve input states and fixed views while allowing inde
   assert.equal(replaceUnit(registered, original), registered);
 });
 
-test('pure transition maintains blocking before returning and preserves the previous relation', () => {
+test('pure field updates maintain spatial indexes without acquiring blocking relations', () => {
   const blocker = (id, column) => unit(id, [column, 0], {
     allegiance: { side: 'ALLY' }, blocker: { capacity: 1, geometry: { radius: 1 } },
   });
@@ -52,9 +52,12 @@ test('pure transition maintains blocking before returning and preserves the prev
   const beforeView = view(before);
   const removed = removeUnit(before, ref(before.units.get(10)));
 
-  assert.equal(beforeView.blockerOf(20), 10);
-  assert.equal(view(removed).blockerOf(20), 11);
-  assert.equal(beforeView.blockerOf(20), 10);
+  assert.equal(beforeView.blockerOf(20), undefined);
+  assert.equal(view(removed).blockerOf(20), undefined);
+  assert.equal(beforeView.blockerOf(20), undefined);
+  assert.deepEqual(beforeView.unitsAt([0, 1]).map(unit => unit.id), [10, 20]);
+  assert.deepEqual(view(removed).unitsAt([0, 1]).map(unit => unit.id), [20]);
+  assert.equal('blockingRelations' in before, false);
   assert.equal(removed.units.has(10), false);
 });
 
@@ -95,7 +98,7 @@ test('battle removal records the current instance independently from final field
   assert.deepEqual(view(before.battlefield).unitIds, []);
   assert.equal(registered.battlefield.units.get(temporary.id), temporary);
   assert.deepEqual(removed.removedUnits, [
-    { unitId: temporary.id, reason: 'SCRIPT', unit: latest },
+    { unitId: temporary.id, reason: 'SCRIPT', unit: { ...latest, lifecycle: 'LEAVING' } },
   ]);
   assert.equal(removeBattleUnit(removed, temporary.id, 'SCRIPT'), removed);
   const { events } = finishBattleEvents(removed.events, removed.removedUnits, 0);

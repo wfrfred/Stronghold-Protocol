@@ -6,6 +6,7 @@ import { ref as mechanismRef, type MechanismId, type Mechanism } from "../battle
 import { getLostSupports } from "../battlefield/support/relations.js";
 import type { Unit, Id } from "../unit/unit.js";
 import { ref } from "../unit/query.js";
+import * as blocking from "./blocking/operations.js";
 import type { Event, UnitRemoval, Result as BattleResult } from "./contract.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import type { PredefinedPresence } from "./steps/predefined.js";
@@ -127,29 +128,25 @@ export function removeMechanism(state: State, id: MechanismId): State {
 
 /* eslint-disable @typescript-eslint/no-unnecessary-type-parameters -- Accept capability-bearing object literals while returning only State. */
 export function updateUnit<U extends Unit>(state: State, unit: U): State {
-    return updateUnits(state, [unit]);
-}
+    const previous = getUnit(state, unit.id);
 
-export function updateUnits<U extends Unit>(state: State, units: readonly U[]): State {
-    const replacements: U[] = [];
-
-    for (const unit of new Map(units.map((unit) => [unit.id, unit])).values()) {
-        const current = getUnit(state, unit.id);
-
-        if (current !== undefined && current !== unit) {
-            replacements.push(unit);
-        }
+    if (previous === undefined) {
+        return blocking.maintain(state);
     }
 
-    return setBattlefield(state, battlefield.replaceUnits(state.battlefield, replacements));
+    state = setBattlefield(state, battlefield.replaceUnit(state.battlefield, unit));
+    const synchronized = blocking.synchronize(state, previous, unit);
+    state = synchronized.state;
+
+    if (synchronized.value !== undefined) {
+        state = blocking.notify(state, synchronized.value);
+    }
+
+    return blocking.maintain(state);
 }
 
 export function registerUnit<U extends Unit>(state: State, unit: U): State {
-    return setBattlefield(state, battlefield.addUnit(state.battlefield, unit));
-}
-
-export function registerUnits<U extends Unit>(state: State, units: readonly U[]): State {
-    return setBattlefield(state, battlefield.addUnits(state.battlefield, units));
+    return blocking.maintain(setBattlefield(state, battlefield.addUnit(state.battlefield, unit)));
 }
 /* eslint-enable @typescript-eslint/no-unnecessary-type-parameters */
 
@@ -178,15 +175,27 @@ export function removeUnit(
     id: Id,
     reason: BattlefieldRemovalReason = "DEATH",
 ): State {
-    const unit = getUnit(state, id);
+    let unit = getUnit(state, id);
 
     if (unit === undefined) {
         return state;
     }
 
+    if (unit.lifecycle !== "LEAVING") {
+        state = updateUnit(state, { ...unit, lifecycle: "LEAVING" });
+        unit = getUnit(state, id);
+
+        if (unit === undefined) {
+            return state;
+        }
+    }
+
     const next = setBattlefield(state, battlefield.removeUnit(state.battlefield, ref(unit)));
 
-    return { ...next, removedUnits: [...next.removedUnits, { unitId: id, reason, unit }] };
+    return blocking.maintain({
+        ...next,
+        removedUnits: [...next.removedUnits, { unitId: id, reason, unit }],
+    });
 }
 
 export function appendEvents(state: State, events: readonly Event[]): State {

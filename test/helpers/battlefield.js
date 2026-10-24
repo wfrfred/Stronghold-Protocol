@@ -21,17 +21,10 @@ export function fixtureBattlefieldState(input, mechanisms = input) {
     const registeredMechanisms = (mechanisms?.mechanismIds ?? []).map(id => [id, mechanisms.getMechanism(id)]);
     for (const id of input.projectileIds ?? [])
         state = { ...state, projectiles: state.projectiles.add(input.getProjectile(id)) };
-    const relations =
-        input.blockingRelations ??
-        units.flatMap((unit) => {
-            const blockerUnitId = input.blockerOf?.(unit.id);
-            return blockerUnitId === undefined ? [] : [{ blockerUnitId, blockedUnitId: unit.id }];
-        });
     return maintain(state, {
         ...state,
         units: new Map(units.map(unit => [unit.id, unit])),
         mechanisms: new Map(registeredMechanisms),
-        blockingRelations: relations.length ? relations : state.blockingRelations,
         supportRelations: input.supportRelations?.length ? input.supportRelations : state.supportRelations,
     });
 }

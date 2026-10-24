@@ -1,5 +1,7 @@
 import { World } from "../../geometry/coordinate.js";
 import { hasVitality, resolveMaxHp } from "../../unit/capability/vitality/capability.js";
+import { hasBlocker } from "../../unit/capability/blocking/blocker.js";
+import { hasBlockable } from "../../unit/capability/blocking/blockable.js";
 import { get } from "../../unit/query.js";
 import type { Comparator } from "./contract.js";
 
@@ -38,12 +40,23 @@ export const hpRatio: Comparator = (_battle, _request, left, right) => {
 };
 
 export const blockedFirst: Comparator = (battle, request, left, right) => {
-    const order = (id: number) =>
-        battle.battlefield.blockingRelations.findIndex(
-            (relation) =>
-                (relation.blockerUnitId === request.source.id && relation.blockedUnitId === id) ||
-                (relation.blockedUnitId === request.source.id && relation.blockerUnitId === id),
-        );
+    const source = get(battle, request.source);
+
+    const order = (id: number) => {
+        if (source === undefined) {
+            return -1;
+        }
+        if (hasBlockable(source) && source.blockable.blocker?.id === id) {
+            return 0;
+        }
+
+        const index = hasBlocker(source)
+            ? source.blocker.blocked.findIndex((ref) => ref.id === id)
+            : -1;
+
+        return index < 0 ? -1 : index + 1;
+    };
+
     const leftOrder = order(left.id);
     const rightOrder = order(right.id);
 

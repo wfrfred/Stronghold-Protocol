@@ -1923,15 +1923,15 @@ test('core blocked enemies at their route end stay in combat until their blocker
   });
   const first = runtime.step();
   assert.equal(first.result, null);
-  assert.ok(first.events.some(event => event.type === 'ACTION' && event.sourceUnitId === 1 && event.targetUnitId === 0));
+  assert.equal(first.events.some(event => event.type === 'ACTION' && event.sourceUnitId === 1), false);
   assert.equal(first.events.some(event => event.type === 'ROUTE_COMPLETED' || event.type === 'UNIT_REMOVED'), false);
   const held = runtime.snapshot();
   assert.deepEqual(held.units.map(unit => unit.id), [0, 1]);
   assert.deepEqual(held.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
   assert.deepEqual(held.spawning.managedFinalUnitIds, [1]);
   assert.equal(held.units[1].route.main.phase.type, 'COMPLETED');
-  assert.equal(held.units[0].vitality.hp, 1);
-  for (let tick = 1; tick < 3; tick++) {
+  assert.equal(held.units[0].vitality.hp, 2);
+  for (let tick = 1; tick < 4; tick++) {
     const waiting = runtime.step();
     assert.equal(waiting.result, null);
     assert.equal(waiting.events.some(event => event.type === 'ROUTE_COMPLETED' || event.type === 'UNIT_REMOVED'), false);
@@ -1941,7 +1941,7 @@ test('core blocked enemies at their route end stay in combat until their blocker
   assert.deepEqual(released.events.filter(event => event.type === 'UNIT_REMOVED').map(event => [event.unitId, event.reason]), [[0, 'DEATH'], [1, 'SCRIPT']]);
   assert.deepEqual(released.events.filter(event => event.type === 'ROUTE_COMPLETED').map(event => event.unitId), [1]);
   assert.equal(released.result.reason, 'SCHEDULE_COMPLETED');
-  assert.equal(released.result.elapsedTicks, 4);
+  assert.equal(released.result.elapsedTicks, 5);
   assert.equal(released.result.completedRouteCount, 1);
   assert.deepEqual(runtime.snapshot().blockingRelations, []);
   assert.deepEqual(runtime.snapshot().units, []);
@@ -2039,7 +2039,9 @@ test('core same-position alternative disappearance and appearance replace an exi
   const after = runtime.snapshot();
   assert.deepEqual(after.units.find(unit => unit.id === 1).position, before.units[1].position);
   assert.equal(after.units.find(unit => unit.id === 1).spatialPresence.present, true);
-  assert.deepEqual(after.blockingRelations, [{ blockerUnitId: 2, blockedUnitId: 1 }]);
+  assert.deepEqual(after.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
+  assert.notEqual(after.units.find(unit => unit.id === 0).blocker.blocked[0],
+    before.units.find(unit => unit.id === 0).blocker.blocked[0]);
   assert.equal(step.result, null);
 });
 

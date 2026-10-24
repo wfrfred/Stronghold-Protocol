@@ -3,8 +3,7 @@ import type { BattlefieldMap } from "../battlefield/map/map.js";
 import type { UnitPlacementDefinition } from "./creation/placement.js";
 import type { MechanismPlacementDefinition } from "./creation/mechanism.js";
 import type { SpawnScheduleDefinition } from "./schedule/definition.js";
-import type { BattlefieldRemovalReason } from "../battlefield/contract.js";
-import type { BlockingRelation } from "../battlefield/blocking/relations.js";
+import type { BattlefieldRemovalReason, BlockingRelation } from "../battlefield/contract.js";
 import type { CombatEvent } from "./execution/event.js";
 import type { Mechanism } from "../battlefield/mechanism.js";
 import type { State as NavigationState } from "../battlefield/navigation/state.js";
@@ -74,6 +73,12 @@ export type Event =
     | ProjectileSignal
     | SkillSignal
     | ElementalSignal
+    | {
+          readonly type: "BLOCKING_ACQUIRED" | "BLOCKING_RELEASED";
+          readonly blockerUnitId: Id;
+          readonly blockedUnitId: Id;
+          readonly tick: number;
+      }
     | {
           readonly type: "UNIT_DEPLOYED" | "UNIT_RELOCATED";
           readonly unitId: Id;

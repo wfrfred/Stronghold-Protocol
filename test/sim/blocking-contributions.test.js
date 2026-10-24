@@ -1,29 +1,12 @@
-import { getLostSupports } from '../../dist/core/tactical/battlefield/support/relations.js';
-import { fixtureBattle } from "../helpers/unit.js";
-import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
-import { deadline, setDeadline } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-
-import {
-    createBattleState,
-    battlefieldView,
-    getUnit,
-} from "../../dist/core/tactical/battle/state.js";
-import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
-import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
-import { create as createMap } from "../../dist/core/tactical/battlefield/map/navigation.js";
-import { create as createNavigation } from "../../dist/core/tactical/battlefield/navigation/state.js";
-import { compareUnits, deriveBattlefieldDependencies } from "../../dist/core/tactical/battlefield/storage/dependencies.js";
-import {
-    createBattlefieldState,
-    maintain,
-    maintainFully,
-} from "../../dist/core/tactical/battlefield/storage/state.js";
-import { initialize } from "../helpers/unit.js";
-import { copy } from "../../dist/core/tactical/unit/snapshot.js";
+import { fixtureBattle, initialize } from "../helpers/unit.js";
+import { fixture as blockingFixture, acquire, blockedIds } from "../helpers/blocking.js";
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
+import { deadline, setDeadline } from "../../dist/core/tactical/unit/effect/effect.js";
+import { getUnit, registerUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
+import { usedCapacity } from "../../dist/core/tactical/battle/blocking/query.js";
 import {
     initialize as initializeBlockerState,
     resolveCapacity,
@@ -31,28 +14,15 @@ import {
     removeCapacityContribution,
 } from "../../dist/core/tactical/unit/capability/blocking/blocker.js";
 import {
-    canBeBlocked,
-    resolveVolume,
-    setVolumeContribution,
-    removeVolumeContribution,
-    setRule,
-    removeRule,
+    canBeBlocked, resolveVolume, setVolumeContribution, removeVolumeContribution, setRule, removeRule,
 } from "../../dist/core/tactical/unit/capability/blocking/blockable.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import * as contribution from "../../dist/core/tactical/unit/contribution/contribution.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/attribute.js";
-import {
-    compileAttributeModifiers,
-    parseAttributeModifiers,
-} from "../../dist/data/arknights/modifier.js";
+import { compileAttributeModifiers, parseAttributeModifiers } from "../../dist/data/arknights/modifier.js";
 import { compileBuffStacking, parseBuffStacking } from "../../dist/data/arknights/buff-stacking.js";
 import {
-    contributionEffect,
-    refreshContribution,
-    maxHpBuff,
-    at,
-    effectFixtureWork,
-    replaceEffectFixture,
+    contributionEffect, refreshContribution, maxHpBuff, at, effectFixtureWork, replaceEffectFixture,
 } from "../helpers/effects.js";
 
 const fixtures = JSON.parse(
@@ -106,8 +76,8 @@ test("blocking initialization accepts plain definitions and validates them throu
     const unit = initialize({ id: 0, position: [0, 0], definition });
     assert.equal(unit.definition, definition);
     assert.equal(unit.blocker.geometry, geometry);
-    assert.deepEqual(unit.blocker, { capacity: [], geometry, rules: [] });
-    assert.deepEqual(unit.blockable, { volume: [], rules: [] });
+    assert.deepEqual(unit.blocker, { capacity: [], geometry, rules: [], blocked: [], acquired: [], released: [] });
+    assert.deepEqual(unit.blockable, { volume: [], rules: [], blocker: null, acquired: [], released: [] });
     for (const [capability, invalid] of [
         ["blocker", { capacity: -1, geometry }],
         ["blocker", { capacity: 1.5, geometry }],
@@ -198,71 +168,21 @@ test("blocking capacity: explicit refresh and lifecycle output changes preserve 
 });
 
 function battlefield(units) {
-    const tile = createTile({
-        heightType: "LOWLAND",
-        buildableType: "ALL",
-        passableMask: "ALL",
-        playerSideMask: "ALL",
-        terrain: "NORMAL",
-        mechanism: null,
-    });
-    const map = createBattlefieldMap(1, 1, [tile]);
-    const navigation = createNavigation({
-        WALK: createMap(map, "WALK"),
-        FLY: createMap(map, "FLY"),
-    });
-    const branches = [maintain, maintainFully].map((settle) => ({
-        settle,
-        state: { map, ...createBattlefieldState(map, navigation) },
-    }));
-    const commit = (transform) => {
-        const content = transform(branches[0].state);
-        const results = branches.map((branch) => {
-            const previous = branch.state;
-            const changed = compareUnits(previous.units, content.units);
-            const dependencies = deriveBattlefieldDependencies(
-                map,
-                previous,
-                content,
-                changed,
-            );
-            const settled = branch.settle(previous, content, changed);
-            branch.state = settled;
-            return { lostSupports: getLostSupports(previous.supportRelations, settled.supportRelations, settled.units), dependencies };
-        });
-        assert.deepEqual(results[0], results[1]);
-        assert.deepEqual(branches[0].state, branches[1].state);
-        return results[0];
+    let battle = acquire(blockingFixture(units), 0);
+    return {
+        get state() { return battle.battlefield; },
+        work() { return battle; },
+        publish(next) { battle = next; },
+        search() { battle = acquire(battle, 0); },
+        commit(transform) {
+            const content = transform(battle.battlefield);
+            for (const [id, unit] of content.units) {
+                if (getUnit(battle, id) === undefined) battle = registerUnit(battle, unit);
+                else if (getUnit(battle, id) !== unit) battle = updateUnit(battle, unit);
+            }
+        },
+        blocked() { return blockedIds(battle, 0); },
     };
-    const h = {
-        branches,
-        commit,
-        get state() {
-            return branches[0].state;
-        },
-        work() {
-            return createBattleState(
-                fixtureBattlefield({
-                    map,
-                    unitIds: [...h.state.units.keys()],
-                    getUnit: (id) => h.state.units.get(id),
-                    blockingRelations: h.state.blockingRelations,
-                    supportRelations: h.state.supportRelations,
-                }),
-            );
-        },
-        publish(work) {
-            return commit(previous => ({
-                ...previous,
-                units: new Map([...previous.units, ...battlefieldView(work).unitIds.map(id => [id, getUnit(work, id)])]),
-            }));
-        },
-        blocked() {
-            return h.state.blockingRelations.map((relation) => relation.blockedUnitId);
-        },
-    };
-    commit(previous => ({ ...previous, units: new Map(units.map(unit => [unit.id, unit])) }));
-    return h;
 }
 
 test("blocking volume: independent Effect contributions release targets and clean up by source", () => {
@@ -284,9 +204,11 @@ test("blocking volume: independent Effect contributions release targets and clea
     const expanded = h.state.units.get(1);
     assert.equal(resolveVolume(expanded.definition.blockable, expanded.blockable), 3);
     assert.deepEqual(h.blocked(), [1]);
-    assert.equal(battlefieldView(h.work()).blockingUsedCapacity(0), 3);
+    assert.equal(usedCapacity(h.work(), { id: 0 }), 3);
 
     h.publish(effects.end(h.work(), firstRef));
+    assert.deepEqual(h.blocked(), [1]);
+    h.search();
     assert.deepEqual(h.blocked(), [1, 2]);
     h.publish(effects.setEnabled(h.work(), secondRef, false));
     assert.equal(resolveVolume(h.state.units.get(1).definition.blockable, h.state.units.get(1).blockable), 1);
@@ -320,6 +242,8 @@ test("blocking volume: integer additions honor exclusive groups and restore the 
     const fallback = removeVolumeContribution(state, "higher");
     replace(fallback);
     assert.equal(resolveVolume(original.definition.blockable, fallback), 3);
+    assert.deepEqual(h.blocked(), [1]);
+    h.search();
     assert.deepEqual(h.blocked(), [1, 2]);
     assert.equal(resolveVolume(original.definition.blockable, state), 4);
     assert.equal(resolveVolume(original.definition.blockable, original.blockable), 1);
@@ -345,8 +269,9 @@ test("blocking volume: negative additions still consume one capacity while Rules
         const current = h.state.units.get(1);
         assert.equal(resolveVolume(current.definition.blockable, current.blockable), 1);
         assert.equal(canBeBlocked(current), true);
+        h.search();
         assert.deepEqual(h.blocked(), [1]);
-        assert.equal(battlefieldView(h.work()).blockingUsedCapacity(0), 1);
+        assert.equal(usedCapacity(h.work(), { id: 0 }), 1);
     }
     h.commit(state => ({ ...state, units: new Map([...state.units, ...[enemy(2)].map(unit => [unit.id, unit])]) }));
     assert.deepEqual(h.blocked(), [1]);
@@ -355,6 +280,8 @@ test("blocking volume: negative additions still consume one capacity while Rules
         ...unit, blockable: setRule(unit.blockable, { id: "unblockable", allows: () => false }),
     }].map(unit => [unit.id, unit])]) }));
     assert.equal(canBeBlocked(h.state.units.get(1)), false);
+    assert.deepEqual(h.blocked(), []);
+    h.search();
     assert.deepEqual(h.blocked(), [2]);
 });
 
@@ -375,6 +302,8 @@ test("blocking eligibility: overlapping rules release and reacquire targets inde
     assert.deepEqual(h.blocked(), [2]);
     change(state => removeRule(state, second.id));
     assert.equal(canBeBlocked(h.state.units.get(1)), true);
+    assert.deepEqual(h.blocked(), [2]);
+    h.search();
     assert.deepEqual(h.blocked(), [2, 1]);
     assert.equal(resolveVolume(original.definition.blockable, original.blockable), 1);
     assert.deepEqual(original.blockable.rules, []);
@@ -392,8 +321,7 @@ test("blocking volume: equivalent contribution changes leave the blocking projec
         ),
     };
     const result = h.commit(state => ({ ...state, units: new Map([...state.units, ...[changed].map(unit => [unit.id, unit])]) }));
-    assert.equal(result.dependencies.blocking, false);
-    assert.equal(h.state.blockingRelations, before.blockingRelations);
+    assert.equal(h.state.units.get(0).blocker.blocked, before.units.get(0).blocker.blocked);
     assert.equal(h.state.spatial, before.spatial);
     assert.equal(h.state.navigation, before.navigation);
 });
@@ -462,6 +390,7 @@ test("blocking capacity: native stack renewal and terminal cleanup update real b
         let work = h.work();
         work = effects.advance(at(work, tick));
         h.publish(work);
+        h.search();
         assert.equal(capacityOf(h.state.units.get(0)), remaining);
         assert.deepEqual(
             h.blocked(),
@@ -492,6 +421,8 @@ test("blocking capacity: native zero scaler releases weighted targets and restor
     let paused = h.work();
     paused = effects.setEnabled(paused, effectAddress, false);
     h.publish(paused);
+    assert.deepEqual(h.blocked(), []);
+    h.search();
     assert.deepEqual(h.blocked(), [1, 2]);
     let resumed = h.work();
     resumed = effects.setEnabled(resumed, effectAddress, true);
@@ -500,6 +431,8 @@ test("blocking capacity: native zero scaler releases weighted targets and restor
     let finished = h.work();
     finished = effects.end(finished, effectAddress);
     h.publish(finished);
+    assert.deepEqual(h.blocked(), []);
+    h.search();
     assert.deepEqual(h.blocked(), [1, 2]);
     assert.deepEqual(
         [...h.state.units.values()].slice(1).map((unit) => resolveVolume(unit.definition.blockable, unit.blockable)),
@@ -521,16 +454,11 @@ test("blocking capacity: replacing contribution entries without changing the res
     assert.notEqual(changed.blocker.capacity, owner.blocker.capacity);
     assert.equal(capacityOf(changed), capacityOf(owner));
     const result = h.commit(state => ({ ...state, units: new Map([...state.units, ...[changed].map(unit => [unit.id, unit])]) }));
-    assert.deepEqual(result.dependencies, {
-        unitTiles: false,
-        occupancy: false,
-        support: false,
-        blocking: false,
-    });
-    assert.equal(h.state.blockingRelations, before.blockingRelations);
+    assert.equal(h.state.units.get(0).blocker.blocked, before.units.get(0).blocker.blocked);
     assert.equal(h.state.spatial, before.spatial);
     assert.equal(h.state.navigation, before.navigation);
     const refreshed = ({ ...h.state.units.get(0), blocker: setCapacityContribution(h.state.units.get(0).blocker, entry("positive", modifier.create({ addition: 1.1 }))) });
     assert.equal(capacityOf(refreshed), 3);
-    assert.equal(h.commit(state => ({ ...state, units: new Map([...state.units, ...[refreshed].map(unit => [unit.id, unit])]) })).dependencies.blocking, false);
+    h.commit(state => ({ ...state, units: new Map([...state.units, ...[refreshed].map(unit => [unit.id, unit])]) }));
+    assert.equal(h.state.units.get(0).blocker.blocked, before.units.get(0).blocker.blocked);
 });

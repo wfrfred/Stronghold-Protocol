@@ -4,7 +4,6 @@ import type { Unit, Id } from "../unit/unit.js";
 import type { OccupancySlot } from "../unit/capability/occupancy/capability.js";
 import type { BattlefieldMap } from "./map/map.js";
 import type { MechanismView } from "./mechanism.js";
-import type { BlockingRelation } from "./blocking/relations.js";
 import type { SupportRelation } from "./support/relations.js";
 import type { ProjectileView } from "./projectile/projectile.js";
 import type { Index } from "./storage/effect-lifetimes.js";
@@ -13,6 +12,11 @@ export type BattlefieldRemovalReason = "DEATH" | "RETREAT" | "EXPIRED" | "SCRIPT
 
 export interface BattlefieldRuntimeOptions {
     readonly map: BattlefieldMap;
+}
+
+export interface BlockingRelation {
+    readonly blockerUnitId: Id;
+    readonly blockedUnitId: Id;
 }
 
 export interface BattlefieldView<U extends Unit = Unit> extends MechanismView, ProjectileView {

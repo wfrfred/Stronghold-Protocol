@@ -1,6 +1,6 @@
 import { evaluateDeployment } from "../../battlefield/deployment/query.js";
 import type { SupportRelation } from "../../battlefield/support/relations.js";
-import { releaseBlockingRelations } from "../../battlefield/blocking/relations.js";
+import * as blocking from "../blocking/operations.js";
 import { maintain } from "../../battlefield/storage/state.js";
 import { Tile, type TilePosition } from "../../geometry/coordinate.js";
 import { hasDeployable, type Deployable } from "../../unit/capability/deployable/capability.js";
@@ -9,6 +9,7 @@ import { hasOccupancy, type Occupancy } from "../../unit/capability/occupancy/ca
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
 import { instantiateUnitPlacement } from "../creation/placement.js";
 import type { Unit, Id } from "../../unit/unit.js";
+import * as unitQueries from "../../unit/query.js";
 import type { Command } from "../contract.js";
 import { enter, leave } from "../execution/unit.js";
 import {
@@ -163,6 +164,7 @@ export function deploy(state: BattleState, request: DeployRequest): Result<Deplo
             { updatedUnitIds: new Set([unit.id]), unitOrderChanged: true },
         ),
     );
+    state = blocking.maintain(state);
     state = appendEvents(state, [
         {
             type: "UNIT_DEPLOYED",
@@ -227,6 +229,7 @@ export function relocate(
             ],
         },
     };
+    const relations = blocking.capture(state, unitQueries.ref(unit));
     const previous = state.battlefield;
     const units = new Map(previous.units);
     units.set(unit.id, moved);
@@ -238,12 +241,13 @@ export function relocate(
             {
                 ...previous,
                 units,
-                blockingRelations: releaseBlockingRelations(previous.blockingRelations, unit.id),
                 supportRelations,
             },
             { updatedUnitIds: new Set([unit.id]), unitOrderChanged: false },
         ),
     );
+    state = blocking.releaseCaptured(state, relations);
+    state = blocking.maintain(state);
 
     return appendEvents(state, [
         { type: "UNIT_RELOCATED", unitId: unit.id, position: moved.position, tick: state.tick },

@@ -1,3 +1,4 @@
+import { advance as advanceBlocking } from "../../dist/core/tactical/battle/blocking/operations.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -36,7 +37,7 @@ function actor(action = true) {
 }
 
 test("stun composes four capabilities and overlapping instances withdraw only their own rules", () => {
-    const original = battle(actor(), unit(1, { blockable: { volume: 1 } }));
+    const original = advanceBlocking(battle(actor(), unit(1, { blockable: { volume: 1 } })));
     const first = effects.install(original, unitRef(getUnit(original, 0)), stun, { scopes: [{ type: "TICK", tick: 5 }] });
     const second = effects.install(first.state, unitRef(getUnit(first.state, 0)), stun);
     const host = getUnit(second.state, 0);
@@ -55,12 +56,16 @@ test("stun composes four capabilities and overlapping instances withdraw only th
     assert.equal(canMove(state, getUnit(state, 0)), true);
     assert.equal(canBlock(getUnit(state, 0)), true);
     assert.equal(activationAllowed(state), true);
+    assert.equal(battlefieldView(state).blockerOf(1), undefined);
+    state = advanceBlocking(state);
     assert.equal(battlefieldView(state).blockerOf(1), 0);
 
     state = effects.setEnabled(state, first.value, true);
     assert.equal(canBlock(getUnit(state, 0)), false);
     state = effects.advance({ ...state, tick: 5 });
     assert.equal(canBlock(getUnit(state, 0)), true);
+    assert.equal(battlefieldView(state).blockerOf(1), undefined);
+    state = advanceBlocking(state);
     assert.equal(battlefieldView(state).blockerOf(1), 0);
     assert.equal(actionAllowed(original, getUnit(original, 0)), true);
     assert.equal(actionAllowed(second.state, host), false);

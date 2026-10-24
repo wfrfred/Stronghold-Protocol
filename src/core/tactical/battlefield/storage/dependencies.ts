@@ -9,7 +9,6 @@ import type { Unit, Id } from "../../unit/unit.js";
 import type { BattlefieldMap } from "../map/map.js";
 import { battlefieldTileKey } from "./indexes.js";
 import type { BattlefieldContent, BattlefieldState } from "./state.js";
-import { readBlockingFacts, sameBlockingFacts } from "../blocking/facts.js";
 import { readSupportFacts, sameSupportFacts } from "../support/facts.js";
 
 export interface BattlefieldDependencyChanges {
@@ -90,7 +89,6 @@ export function deriveBattlefieldDependencies<U extends Unit>(
     let unitTiles = changes.unitOrderChanged;
     let occupancy = changes.unitOrderChanged;
     let support = changes.unitOrderChanged;
-    let blocking = changes.unitOrderChanged;
 
     for (const id of changes.updatedUnitIds) {
         const left = previous.units.get(id);
@@ -110,8 +108,7 @@ export function deriveBattlefieldDependencies<U extends Unit>(
 
         occupancy ||= !sameOccupancyInputs(left, right);
         support ||= !sameSupportFacts(readSupportFacts(left), readSupportFacts(right));
-        blocking ||= !sameBlockingFacts(map, readBlockingFacts(left), readBlockingFacts(right));
     }
 
-    return { unitTiles, occupancy, support, blocking };
+    return { unitTiles, occupancy, support };
 }

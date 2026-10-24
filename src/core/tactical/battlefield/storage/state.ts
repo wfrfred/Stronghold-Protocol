@@ -2,8 +2,6 @@ import { Projectiles } from "../projectile/projectiles.js";
 import type { State as NavigationState } from "../navigation/state.js";
 import type { Unit, Id } from "../../unit/unit.js";
 import type { State as FieldState } from "../state.js";
-import { updateBlockingRelations, type BlockingRelation } from "../blocking/relations.js";
-import { synchronize as synchronizeMovement } from "../blocking/movement.js";
 import {
     compareUnits,
     deriveBattlefieldDependencies,
@@ -27,7 +25,6 @@ import { derive, project, type Index } from "./effect-lifetimes.js";
 export interface BattlefieldContent<U extends Unit> {
     readonly projectiles: Projectiles;
     readonly units: ReadonlyMap<Id, U>;
-    readonly blockingRelations: readonly BlockingRelation[];
     readonly supportRelations: readonly SupportRelation[];
     readonly mechanisms: ReadonlyMap<MechanismId, Mechanism>;
 }
@@ -48,7 +45,6 @@ export function createBattlefieldState<U extends Unit>(
         units,
         projectiles: Projectiles.empty(),
         mechanisms: new Map<MechanismId, Mechanism>(),
-        blockingRelations: [],
         supportRelations: [],
         navigation,
         spatial: projectBattlefieldSpatial(map, units),
@@ -66,7 +62,6 @@ function finishSettlement<U extends Unit>(
         content.units === previous.units &&
         content.projectiles === previous.projectiles &&
         content.mechanisms === previous.mechanisms &&
-        content.blockingRelations === previous.blockingRelations &&
         content.supportRelations === previous.supportRelations &&
         spatial === previous.spatial &&
         effectLifetimes === previous.effectLifetimes;
@@ -102,23 +97,9 @@ export function maintain<U extends Unit>(
         };
     }
 
-    const blockingRelations =
-        dependencies.blocking ||
-        supportRelations !== previous.supportRelations ||
-        content.blockingRelations !== previous.blockingRelations
-            ? updateBlockingRelations(
-                  map,
-                  content.units,
-                  content.blockingRelations,
-                  spatial.unitsByTile,
-                  supportRelations,
-              )
-            : previous.blockingRelations;
-    const units = synchronizeMovement(content.units, blockingRelations);
-
     return finishSettlement(
         previous,
-        { ...content, units, supportRelations, blockingRelations },
+        { ...content, supportRelations },
         spatial,
         content.units === previous.units
             ? previous.effectLifetimes
@@ -144,18 +125,10 @@ export function maintainFully<U extends Unit>(
 
     const supportRelations = reconcileSupportRelations(content.units, content.supportRelations);
     const spatial = projectBattlefieldSpatial(map, content.units);
-    const blockingRelations = updateBlockingRelations(
-        map,
-        content.units,
-        content.blockingRelations,
-        spatial.unitsByTile,
-        supportRelations,
-    );
-    const units = synchronizeMovement(content.units, blockingRelations);
 
     return finishSettlement(
         previous,
-        { ...content, units, supportRelations, blockingRelations },
+        { ...content, supportRelations },
         spatial,
         project(content.units.values()),
     );

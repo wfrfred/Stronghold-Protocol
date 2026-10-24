@@ -5,6 +5,8 @@ import { hasLayer } from "../../unit/capability/layer/capability.js";
 import { hasVitality, resolveMaxHp } from "../../unit/capability/vitality/capability.js";
 import { allowsRestrictions } from "../../unit/capability/targetable/capability.js";
 import { hasElemental } from "../../unit/capability/elemental/capability.js";
+import { hasBlockable } from "../../unit/capability/blocking/blockable.js";
+import { blockerOf } from "../blocking/query.js";
 import {
     canReceiveDamage,
     canReceiveHeal,
@@ -73,19 +75,26 @@ export function range(range: Range): Filter {
     };
 }
 
-export const blocking: Filter = (battle, request, target) =>
-    battle.battlefield.blockingRelations.some(
-        (relation) =>
-            (relation.blockerUnitId === request.source.id &&
-                relation.blockedUnitId === target.id) ||
-            (relation.blockedUnitId === request.source.id && relation.blockerUnitId === target.id),
-    );
+export const blocking: Filter = (battle, request, target) => {
+    const source = get(battle, request.source);
 
-export const blocker: Filter = (battle, request, target) =>
-    battle.battlefield.blockingRelations.some(
-        (relation) =>
-            relation.blockedUnitId === request.source.id && relation.blockerUnitId === target.id,
+    return (
+        (source !== undefined &&
+            hasBlockable(source) &&
+            blockerOf(battle, ref(source))?.id === target.id) ||
+        (hasBlockable(target) && blockerOf(battle, ref(target))?.id === request.source.id)
     );
+};
+
+export const blocker: Filter = (battle, request, target) => {
+    const source = get(battle, request.source);
+
+    return (
+        source !== undefined &&
+        hasBlockable(source) &&
+        blockerOf(battle, ref(source))?.id === target.id
+    );
+};
 
 export const missingHp: Filter = (_battle, _request, target) =>
     hasVitality(target) &&

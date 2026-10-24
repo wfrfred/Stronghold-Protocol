@@ -1,3 +1,5 @@
+import { search as searchBlocking } from "../../dist/core/tactical/battle/blocking/operations.js";
+import { advanceMovement } from "../../dist/core/tactical/battle/steps/movement.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -26,7 +28,7 @@ const address = { host: { id: 0 }, id: 0 };
 const close = (actual, expected) =>
     assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} ≈ ${expected}`);
 
-function harness({ speed = 0.25, minimum = 0, steeringParameters, blockable = false } = {}) {
+function harness({ speed = 0.25, minimum = 0, steeringParameters, blockable = false, route = false } = {}) {
     const initialized = initialize(fixtureBattle(0, { rngState: 17 }), {
         id: 0,
         position: [0, 0],
@@ -35,6 +37,10 @@ function harness({ speed = 0.25, minimum = 0, steeringParameters, blockable = fa
             ...(blockable ? {
                 allegiance: { side: "ENEMY" }, layer: { type: "GROUND" }, blockable: { volume: 1 },
             } : {}),
+            ...(route ? { route: {
+                pathMotionMode: "WALK", startPosition: [0, 0], endPosition: [0, 20], offset: [0, 0],
+                checkpoints: [], requireAllCheckpoints: true, alwaysCheckCurrentPoint: true,
+            } } : {}),
             vitality: { maxHp: 100, defense: 0, resistance: 0 },
             spatialPresence: {},
             locomotion: {
@@ -194,8 +200,8 @@ test("locomotion: absent tracking target skips advancement and preserves inertia
     assert.deepEqual(h.unit.locomotion.velocity, [0.1, 0]);
 });
 
-test("locomotion: lifecycle, presence and blocking gate movement", () => {
-    const h = harness({ blockable: true });
+test("locomotion: lifecycle and presence gate integration while Runtime gates blocking", () => {
+    const h = harness({ blockable: true, route: true });
     h.work = updateUnit(h.work, { ...h.unit, spatialPresence: { present: false } });
     assert.deepEqual(h.step(0).position, [0, 0]);
     h.work = updateUnit(h.work, { ...h.unit, spatialPresence: { present: true } });
@@ -205,8 +211,11 @@ test("locomotion: lifecycle, presence and blocking gate movement", () => {
             blocker: { capacity: 1, geometry: { radius: 1 } },
         },
     });
-    h.work = registerUnit(blocker.state, blocker.value);
-    assert.deepEqual(h.step(1).position, [0, 0]);
+    h.work = searchBlocking(registerUnit(blocker.state, blocker.value), { id: 1 });
+    assert.equal(h.unit.blockable.blocker.id, 1);
+    h.work = advanceMovement({ ...h.work, tick: 1 }, { routeMoveMultiplier: 1 });
+    assert.deepEqual(h.unit.position, [0, 0]);
+    assert.deepEqual(h.unit.locomotion.rules, []);
     h.work = updateUnit(h.work, { ...h.unit, lifecycle: "LEAVING" });
     assert.equal(advance(h.work, unitRef(h.unit), { nextPoint: [20, 0], goal: [20, 0] }, { mode: "WALK", speedMultiplier: 1 }), h.work);
     assert.equal(advance(h.work, { id: 99 }, { nextPoint: [20, 0], goal: [20, 0] }, { mode: "WALK", speedMultiplier: 1 }), h.work);

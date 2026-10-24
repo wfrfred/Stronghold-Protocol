@@ -129,15 +129,15 @@ test('core blocking: a full operator lets another enemy walk through', () => {
   assert.ok(coreBlockingUnit(battle, 2).position[0] < 4.2);
 });
 
-test('core blocking: nearest contact wins even when the enemy does not move', () => {
+test('core blocking: the first registered eligible blocker wins when both contact a stationary enemy', () => {
   const battle = coreBlockingBattle(
     [{ definition: op(FRONT), position: [1, 6] }, { definition: op(BACK), position: [1, 5] }],
     [{ definition: foe('core_still', { speed: 0 }), route: coreBlockingRoute([1, 6], { spawnOffset: [-0.6, 0] }) }],
   );
   battle.step();
 
-  assert.deepEqual(coreBlockedBy(battle, 0), []);
-  assert.deepEqual(coreBlockedBy(battle, 1), [2]);
+  assert.deepEqual(coreBlockedBy(battle, 0), [2]);
+  assert.deepEqual(coreBlockedBy(battle, 1), []);
 });
 
 test('core visibility: blocker death releases its enemy before movement in the same tick', () => {
@@ -145,33 +145,43 @@ test('core visibility: blocker death releases its enemy before movement in the s
     [{ definition: chessRec({ id: FRONT, stats: { maxHp: 10, atk: 0, def: 0, blockCnt: 1 }, skill: null }), position: [1, 5] }],
     [{ definition: foe('core_killer', { atk: 1000 }), route: coreBlockingRoute([1, 6], { spawnOffset: [-0.6, 0] }) }],
   );
-  const first = battle.step();
+  const acquired = battle.step();
+  assert.equal(acquired.events.some(event => event.type === 'UNIT_REMOVED'), false);
+  assert.deepEqual(coreBlockedBy(battle, 0), [1]);
   const stopped = coreBlockingUnit(battle, 1).position;
+  const death = battle.step();
+  const resumed = coreBlockingUnit(battle, 1).position;
 
-  assert.ok(first.events.some(event => event.type === 'UNIT_REMOVED' && event.unitId === 0 && event.reason === 'DEATH'));
+  assert.ok(death.events.some(event => event.type === 'UNIT_REMOVED' && event.unitId === 0 && event.reason === 'DEATH'));
   assert.deepEqual(battle.snapshot().blockingRelations, []);
-  assert.ok(stopped[0] < 5.4);
-  assert.ok(stopped[0] > 5.4 - 1 / 30);
+  assert.ok(resumed[0] < stopped[0]);
+  assert.ok(Math.abs(stopped[0] - resumed[0] - coreBlockingUnit(battle, 1).definition.locomotion.speed) < 1e-9);
   battle.step();
-  assert.ok(coreBlockingUnit(battle, 1).position[0] < stopped[0]);
+  assert.ok(coreBlockingUnit(battle, 1).position[0] < resumed[0]);
 });
 
-test('core visibility: a freed front operator takes over before movement and holds the next tick', () => {
+test('core visibility: a freed front operator takes over after movement and holds the next tick', () => {
   const battle = coreBlockingBattle(
     [
-      { definition: chessRec({ id: FRONT, stats: { maxHp: 1e6, atk: 100, def: 0, blockCnt: 1 }, skill: null }), position: [1, 6] },
+      { definition: chessRec({ id: FRONT, stats: { maxHp: 1e6, atk: 100, def: 0, blockCnt: 1, bat: 1 / 30 }, skill: null }), position: [1, 6] },
       { definition: chessRec({ id: BACK, stats: { maxHp: 10, atk: 0, def: 0, blockCnt: 1 }, skill: null }), position: [1, 5] },
     ],
     [
-      { definition: foe('core_front_target', { hp: 1, speed: 0 }), route: coreBlockingRoute([1, 7], { spawnOffset: [-0.4, 0] }) },
+      { definition: foe('core_front_target', { hp: 101, speed: 0 }), route: coreBlockingRoute([1, 7], { spawnOffset: [-0.4, 0] }) },
       { definition: foe('core_survivor', { atk: 1000 }), route: coreBlockingRoute([1, 6], { spawnOffset: [-0.6, 0] }) },
     ],
   );
-  const first = battle.step();
+  const acquired = battle.step();
+  assert.equal(acquired.events.some(event => event.type === 'UNIT_REMOVED'), false);
+  assert.deepEqual(coreBlockedBy(battle, 0), [2]);
+  assert.deepEqual(coreBlockedBy(battle, 1), [3]);
+  const stopped = coreBlockingUnit(battle, 3).position;
+  const released = battle.step();
   const position = coreBlockingUnit(battle, 3).position;
 
-  assert.deepEqual(first.events.filter(event => event.type === 'UNIT_REMOVED').map(event => event.unitId), [2, 1]);
-  assert.deepEqual(position, [5.4, 1]);
+  assert.deepEqual(released.events.filter(event => event.type === 'UNIT_REMOVED').map(event => event.unitId), [2, 1]);
+  assert.ok(Math.abs(stopped[0] - position[0] - coreBlockingUnit(battle, 3).definition.locomotion.speed) < 1e-9);
+  assert.equal(position[1], 1);
   assert.deepEqual(coreBlockedBy(battle, 0), [3]);
   battle.step();
   assert.deepEqual(coreBlockedBy(battle, 0), [3]);
@@ -183,9 +193,11 @@ test('core blocking: the held enemy outranks a nearer in-range enemy and can be 
     [{ definition: chessRec({ id: FRONT, stats: { atk: 100, maxHp: 1e6, blockCnt: 1 }, skill: null }), position: [1, 5], direction: 'LEFT' }],
     [
       { definition: foe('core_held', { speed: 0 }), route: coreBlockingRoute([1, 6], { spawnOffset: [-0.35, 0] }) },
-      { definition: foe('core_in_range', { speed: 0 }), route: coreBlockingRoute([1, 4], { spawnOffset: [0.4, 0] }) },
+      { definition: foe('core_in_range', { speed: 0 }), route: coreBlockingRoute([1, 4], { spawnOffset: [0.4, 0] }), tick: 1 },
     ],
   );
+  battle.step();
+  assert.deepEqual(coreBlockedBy(battle, 0), [1]);
   const { events } = battle.step();
 
   assert.deepEqual(coreBlockedBy(battle, 0), [1]);

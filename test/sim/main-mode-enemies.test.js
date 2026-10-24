@@ -1,3 +1,4 @@
+import { advance as advanceBlocking } from "../../dist/core/tactical/battle/blocking/operations.js";
 import { damage as damageElement } from "../../dist/core/tactical/unit/capability/elemental/operations.js";
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,7 +8,7 @@ import { create as createHound } from '../../dist/content/tactical/enemies/hound
 import { create as createCrossbowman, createArrow } from '../../dist/content/tactical/enemies/crossbowman.js';
 import { initialize } from "../helpers/unit.js";
 
-import { createBattleState, getUnit, registerUnit } from '../../dist/core/tactical/battle/state.js';
+import { createBattleState, getUnit, registerUnit, battlefieldView } from '../../dist/core/tactical/battle/state.js';
 import { create as createBattlefield } from '../../dist/core/tactical/battlefield/state.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { start as startAction } from '../../dist/core/tactical/unit/action/operations.js';
@@ -93,14 +94,14 @@ test('hound factory composes capabilities and attacks its retained blocker with 
   assert.equal(hound.locomotion.speed.length, 0);
   assert.equal(definition.locomotion.speed, 1.9 / 30);
 
-  const before = registerUnit(registerUnit(emptyBattle(), guard(0, [2, 2])), hound);
+  const before = advanceBlocking(registerUnit(registerUnit(emptyBattle(), guard(0, [2, 2])), hound));
   const damaged = damageElement(before, unitRef(hound), { source: null, type: 'BURN', power: 100 });
   assert.equal(getUnit(damaged.state, 1).elemental.ep.BURN, 900);
   assert.equal(getUnit(damaged.state, 1).vitality.hp, 820);
   const after = startAction(before, unitRef(hound), attack).state;
   assert.equal(getUnit(after, 0).vitality.hp, 850);
   assert.equal(getUnit(before, 0).vitality.hp, 1000);
-  assert.deepEqual(before.events, []);
+  assert.equal(before.events.some(event => event.type === "DAMAGE"), false);
   assert.ok(after.events.some(event => event.type === 'DAMAGE'));
 });
 
@@ -112,10 +113,10 @@ test('a blocked hound selects its blocker directly despite normal targeting rest
   for (const value of [invisibleRestriction, camouflageRestriction, untargetableRestriction]) {
     const blocker = guard(0, [2, 2], 1, [{ id: 'innate', value }]);
     const hound = initialize({ id: 1, position: [2, 2.5], definition });
-    const before = registerUnit(registerUnit(emptyBattle(), blocker), hound);
+    const before = advanceBlocking(registerUnit(registerUnit(emptyBattle(), blocker), hound));
     const request = { ...action.attack.targetGroups[0].targeting, source: unitRef(hound) };
 
-    assert.deepEqual(before.battlefield.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
+    assert.deepEqual(battlefieldView(before).blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
     assert.equal(allowsRestrictions(before, request, getUnit(before, 0)), false);
     assert.deepEqual(select(before, request).value.map(ref => ref.id), [0]);
     const started = startAction(before, unitRef(hound), action);
@@ -133,7 +134,7 @@ test('enemy ranged selection exempts only its actual blocker, including outside 
   }, 0.2);
   const blocker = guard(0, [2, 2], 1, [{ id: 'innate', value: invisibleRestriction }]);
   const bow = initialize({ id: 1, position: [2, 2.5], definition });
-  const state = registerUnit(registerUnit(emptyBattle(), blocker), bow);
+  const state = advanceBlocking(registerUnit(registerUnit(emptyBattle(), blocker), bow));
   const request = { ...action.attack.targetGroups[0].targeting, source: unitRef(bow) };
 
   assert.equal(range(narrow)(state, request, getUnit(state, 0)), false);
@@ -143,7 +144,7 @@ test('enemy ranged selection exempts only its actual blocker, including outside 
   const unblocked = registerUnit(registerUnit(emptyBattle(), guard(0, [2, 2.5], 0, [
     { id: 'innate', value: invisibleRestriction },
   ])), bow);
-  assert.deepEqual(unblocked.battlefield.blockingRelations, []);
+  assert.deepEqual(battlefieldView(unblocked).blockingRelations, []);
   assert.equal(range(narrow)(unblocked, request, getUnit(unblocked, 0)), true);
   assert.deepEqual(select(unblocked, request).value, []);
 });
@@ -157,7 +158,7 @@ test('directly selecting an invincible blocker still preserves damage reception 
     damageReceptionRules: [{ id: 'invincible', allows: () => false }],
   } };
   const hound = initialize({ id: 1, position: [2, 2.5], definition });
-  const state = registerUnit(registerUnit(emptyBattle(), blocker), hound);
+  const state = advanceBlocking(registerUnit(registerUnit(emptyBattle(), blocker), hound));
   const started = startAction(state, unitRef(hound), action);
 
   assert.equal(started.value.type, 'STARTED');

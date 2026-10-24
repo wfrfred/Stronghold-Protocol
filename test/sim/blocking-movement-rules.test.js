@@ -1,318 +1,123 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { initialize } from "../helpers/unit.js";
-import {
-    registerUnits,
-    setBattlefield,
-    battlefieldView,
-    createBattleState,
-    getUnit,
-    removeUnit,
-    updateUnit,
-} from "../../dist/core/tactical/battle/state.js";
-import { create as createBattlefield } from "../../dist/core/tactical/battlefield/state.js";
-import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
-import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
-import { maintain, maintainFully } from "../../dist/core/tactical/battlefield/storage/state.js";
-import * as blocker from "../../dist/core/tactical/unit/capability/blocking/blocker.js";
-import * as blockable from "../../dist/core/tactical/unit/capability/blocking/blockable.js";
+import { getUnit, removeUnit } from "../../dist/core/tactical/battle/state.js";
+import { advanceMovement } from "../../dist/core/tactical/battle/steps/movement.js";
+import * as blocking from "../../dist/core/tactical/battle/blocking/operations.js";
 import * as locomotion from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
-import { advance } from "../../dist/core/tactical/unit/capability/locomotion/operations.js";
 import * as presence from "../../dist/core/tactical/unit/capability/presence/operations.js";
-import { create as modifier } from "../../dist/core/tactical/unit/contribution/attribute.js";
+import { fixture, holder, target, change, acquire, ownerId, blockedIds } from "../helpers/blocking.js";
 
-const blockingRuleId = "@blocking/blocked";
-const context = { mode: "WALK", speedMultiplier: 1 };
-const blockingRule = (unit) => unit.locomotion.rules.find((rule) => rule.id === blockingRuleId);
-const relation = (blockerUnitId, blockedUnitId) => ({ blockerUnitId, blockedUnitId });
-const register = units => state => ({ ...state, units: new Map([...state.units, ...units.map(unit => [unit.id, unit])]) });
-
-function fixture(units = []) {
-    const tile = createTile({
-        heightType: "LOWLAND", buildableType: "ALL", passableMask: "ALL",
-        playerSideMask: "ALL", terrain: "NORMAL", mechanism: null,
-    });
-    const map = createBattlefieldMap(3, 10, Array(30).fill(tile));
-    return registerUnits(createBattleState(createBattlefield({ map })), units);
-}
-
-const holder = (id = 10, { position = [2, 1], capacity = 1 } = {}) => initialize({
-    id, position, definition: {
-        id: `movement-rule-holder-${id}`,
-        allegiance: { side: "ALLY" }, spatialPresence: {},
-        vitality: { maxHp: 100, defense: 0, resistance: 0 },
-        blocker: { capacity, geometry: { radius: 1 } },
-    },
+const route = (checkpoints = []) => ({
+    pathMotionMode: "WALK", startPosition: [1, 2], endPosition: [1, 10], offset: [0, 0],
+    checkpoints, requireAllCheckpoints: true, alwaysCheckCurrentPoint: true,
 });
-
-const mover = (id = 20, { position = [2.25, 1], volume = 1, rules = [] } = {}) => {
-    const unit = initialize({
-        id, position, definition: {
-            id: `movement-rule-target-${id}`,
-            allegiance: { side: "ENEMY" }, spatialPresence: {},
-            layer: { type: "GROUND" }, blockable: { volume },
+const mover = (id = 20, { rules = [], checkpoints = [], volume = 1 } = {}) => {
+    const unit = target(id, {
+        volume,
+        definition: {
+            route: route(checkpoints),
             locomotion: {
                 speed: 0.125, minSpeed: 0, halfBodyWidth: 0,
                 steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
             },
         },
     });
-    return { ...unit, locomotion: { ...unit.locomotion, rules } };
+    return { ...unit, locomotion: { ...unit.locomotion, rules, velocity: [0.0625, 0] } };
 };
-
-function step(battle, id = 20, mode = "WALK") {
-    const unit = getUnit(battle, id);
-    const goal = [8, unit.position[1]];
-    return advance(battle, { id }, { nextPoint: goal, goal }, { ...context, mode });
+const step = battle => advanceMovement(battle, { routeMoveMultiplier: 1 });
+function assertMoves(battle, id = 20) {
+    const before = getUnit(battle, id);
+    const after = getUnit(step(battle), id);
+    assert.ok(after.position[0] > before.position[0]);
+    assert.deepEqual(getUnit(battle, id).position, before.position);
 }
-
 function assertStopped(battle, id = 20) {
-    assert.equal(step(battle, id), battle, `unit ${id} must remain immobile`);
+    const before = getUnit(battle, id);
+    const after = getUnit(step(battle), id);
+    assert.deepEqual(after.position, before.position);
+    assert.equal(after.locomotion.velocity, before.locomotion.velocity);
 }
 
-function assertMoves(battle, id = 20, mode = "WALK") {
-    const previous = getUnit(battle, id);
-    const moved = getUnit(step(battle, id, mode), id);
-    assert.ok(moved.position[0] > previous.position[0], `unit ${id} must move after release`);
-    assert.deepEqual(previous.position, getUnit(battle, id).position);
-}
-
-function change(battle, id, transition) {
-    return updateUnit(battle, transition(getUnit(battle, id)));
-}
-
-test("Blocking automatically installs one shared movement rule without changing registered snapshots", () => {
-    const first = mover(20);
-    const second = mover(21);
-    const stationary = initialize({
-        id: 22, position: [2.5, 1],
-        definition: { id: "stationary-blockable", allegiance: { side: "ENEMY" }, blockable: { volume: 1 } },
-    });
-    let battle = fixture([holder(10, { capacity: 3 }), first, second, stationary]);
-    assert.deepEqual(battlefieldView(battle).blockedBy(10), [20, 21, 22]);
-    const rule = blockingRule(getUnit(battle, 20));
-    assert.ok(rule);
-    assert.equal(blockingRule(getUnit(battle, 21)), rule);
-    assert.equal(getUnit(battle, 20).locomotion.rules.length, 1);
-    assert.equal(rule.allows(battle, getUnit(battle, 20)), false);
-    assert.equal(getUnit(battle, 22), stationary);
-    assert.deepEqual(first.locomotion.rules, []);
-    assert.deepEqual(second.locomotion.rules, []);
-    assertStopped(battle, 20);
-    assertStopped(battle, 21);
-
-    const current = getUnit(battle, 20);
-    battle = registerUnits(battle, [initialize({
-        id: 30, position: [9, 1], definition: { id: "unrelated-unit" },
-    })]);
-    assert.equal(getUnit(battle, 20), current, "an existing rule must not rebuild an unchanged unit");
-    assert.equal(blockingRule(getUnit(battle, 20)), rule);
+test("Runtime gates blocked autonomous movement without installing Locomotion rules", () => {
+    const original = mover();
+    const battle = acquire(fixture([holder(), original]));
+    assert.deepEqual(getUnit(battle, 20).locomotion.rules, []);
+    assert.equal(getUnit(battle, 20).locomotion, original.locomotion);
+    assert.deepEqual(blockedIds(battle), [20]);
+    assertStopped(battle);
+    assert.deepEqual(original.locomotion.velocity, [0.0625, 0]);
 });
 
-test("Blocking release reacquires in the same settlement, and moving out of range removes the rule", () => {
-    let battle = fixture([holder(), mover()]);
-    const rule = blockingRule(getUnit(battle, 20));
-    battle = setBattlefield(battle, maintain(battle.battlefield, {
-        ...battle.battlefield,
-        blockingRelations: battle.battlefield.blockingRelations.filter(relation => relation.blockerUnitId !== 20 && relation.blockedUnitId !== 20),
-    }));
-    assert.equal(battlefieldView(battle).blockerOf(20), 10);
-    assert.equal(blockingRule(getUnit(battle, 20)), rule);
-    assert.equal(getUnit(battle, 20).locomotion.rules.length, 1);
-    assertStopped(battle);
-
-    battle = setBattlefield(battle, maintain(battle.battlefield, {
-        ...battle.battlefield,
-        units: new Map([...battle.battlefield.units, [20, { ...getUnit(battle, 20), position: [6, 1] }]]),
-        blockingRelations: [],
-    }));
-    assert.equal(battlefieldView(battle).blockerOf(20), undefined);
-    assert.equal(blockingRule(getUnit(battle, 20)), undefined);
-    assertMoves(battle);
-
-    battle = change(battle, 20, (unit) => ({ ...unit, position: [2.25, 1] }));
-    assert.equal(blockingRule(getUnit(battle, 20)), rule);
-    assertStopped(battle);
+test("release restores autonomous movement and preserves the controller velocity", () => {
+    const blocked = acquire(fixture([holder(), mover()]));
+    const velocity = getUnit(blocked, 20).locomotion.velocity;
+    const released = blocking.release(blocked, { id: 20 });
+    assert.equal(ownerId(released), undefined);
+    assert.equal(getUnit(released, 20).locomotion.velocity, velocity);
+    assertMoves(released);
+    assertStopped(blocked);
 });
 
-test("Removing a blocker transfers the relation without losing the rule, then releases movement", () => {
-    let battle = fixture([holder(), holder(11, { position: [3, 1] }), mover()]);
-    const previous = battle;
-    const rule = blockingRule(getUnit(battle, 20));
+test("removing a blocker releases movement until a later blocker search", () => {
+    let battle = acquire(fixture([holder(), holder(11, { position: [3, 1] }), mover()]));
     battle = removeUnit(battle, 10, "RETREAT");
-    assert.equal(battlefieldView(battle).blockerOf(20), 11);
-    assert.equal(blockingRule(getUnit(battle, 20)), rule);
-    assertStopped(battle);
-    assert.equal(battlefieldView(previous).blockerOf(20), 10);
-    assertStopped(previous);
-
-    battle = removeUnit(battle, 11, "DEATH");
-    assert.equal(blockingRule(getUnit(battle, 20)), undefined);
+    assert.equal(ownerId(battle), undefined);
     assertMoves(battle);
-});
-
-test("Changing a blocked target to AIR removes the movement rule and landing reacquires it", () => {
-    let battle = fixture([holder(), mover()]);
-    const rule = blockingRule(getUnit(battle, 20));
-    battle = change(battle, 20, (unit) => ({ ...unit, layer: { type: "AIR" } }));
-    assert.equal(battlefieldView(battle).blockerOf(20), undefined);
-    assert.equal(blockingRule(getUnit(battle, 20)), undefined);
-    assertMoves(battle, 20, "FLY");
-    battle = change(battle, 20, (unit) => ({ ...unit, layer: { type: "GROUND" } }));
-    assert.equal(blockingRule(getUnit(battle, 20)), rule);
+    battle = acquire(battle, 11);
+    assert.equal(ownerId(battle), 11);
     assertStopped(battle);
 });
 
-test("Spatial disappearance removes rules and appearance only restores them when blocking is acquired", () => {
-    let battle = fixture([holder(), mover()]);
-    battle = presence.disappear(battle, { id: 10 });
-    assert.equal(blockingRule(getUnit(battle, 20)), undefined);
-    assertMoves(battle);
-    battle = presence.appear(battle, { id: 10 }, [2, 1]);
-    assert.ok(blockingRule(getUnit(battle, 20)));
-    assertStopped(battle);
-
-    battle = presence.disappear(battle, { id: 20 });
-    assert.equal(blockingRule(getUnit(battle, 20)), undefined);
-    assertStopped(battle);
-    battle = presence.appear(battle, { id: 20 }, [6, 1]);
-    assert.equal(blockingRule(getUnit(battle, 20)), undefined);
-    assertMoves(battle);
-});
-
-test("Capacity and volume changes keep movement rules aligned with the fitting retained relations", () => {
-    let battle = fixture([holder(10, { capacity: 3 }), mover(20, { volume: 2 }), mover(21)]);
-    assertStopped(battle, 20);
-    assertStopped(battle, 21);
-    battle = change(battle, 10, (unit) => ({
-        ...unit, blocker: blocker.setCapacityContribution(unit.blocker, {
-            id: "capacity-reduction", value: [modifier({ addition: -2 })],
-        }),
-    }));
-    assert.deepEqual(battlefieldView(battle).blockedBy(10), [21]);
-    assert.equal(blockingRule(getUnit(battle, 20)), undefined);
-    assertMoves(battle, 20);
-    assertStopped(battle, 21);
-
-    battle = change(battle, 10, (unit) => ({
-        ...unit, blocker: blocker.removeCapacityContribution(unit.blocker, "capacity-reduction"),
-    }));
-    assert.deepEqual(battlefieldView(battle).blockedBy(10), [21, 20]);
-    assertStopped(battle, 20);
-    battle = change(battle, 20, (unit) => ({
-        ...unit, blockable: blockable.setVolumeContribution(unit.blockable, { id: "larger", value: 2 }),
-    }));
-    assert.deepEqual(battlefieldView(battle).blockedBy(10), [21]);
-    assert.equal(blockingRule(getUnit(battle, 20)), undefined);
-    assertMoves(battle, 20);
-    battle = change(battle, 20, (unit) => ({
-        ...unit, blockable: blockable.removeVolumeContribution(unit.blockable, "larger"),
-    }));
-    assertStopped(battle, 20);
-    assertStopped(battle, 21);
-});
-
-test("Blocking removes only its own rule and preserves other movement restrictions", () => {
+test("blocking does not change independently registered Locomotion rules", () => {
     const casting = { id: "casting", allows: () => false };
-    const allowed = { id: "other-permission", allows: () => true };
-    let battle = fixture([holder(), mover(20, { rules: [casting, allowed] })]);
-    assert.equal(getUnit(battle, 20).locomotion.rules.length, 3);
+    const allowed = { id: "permission", allows: () => true };
+    let battle = acquire(fixture([holder(), mover(20, { rules: [casting, allowed] })]));
+    const rules = getUnit(battle, 20).locomotion.rules;
+    assert.deepEqual(rules, [casting, allowed]);
+    battle = blocking.release(battle, { id: 20 });
+    assert.equal(getUnit(battle, 20).locomotion.rules, rules);
     assertStopped(battle);
-    battle = removeUnit(battle, 10, "SCRIPT");
-    assert.deepEqual(getUnit(battle, 20).locomotion.rules, [casting, allowed]);
-    assertStopped(battle);
-    battle = change(battle, 20, (unit) => ({
+    battle = change(battle, 20, unit => ({
         ...unit, locomotion: locomotion.removeRule(unit.locomotion, casting.id),
     }));
     assert.deepEqual(getUnit(battle, 20).locomotion.rules, [allowed]);
     assertMoves(battle);
 });
 
-test("updateUnit restores a missing Blocking rule even when the relation and blocking facts do not change", () => {
-    const unblocked = mover();
-    let battle = fixture([holder(), unblocked]);
-    const relations = battle.battlefield.blockingRelations;
-    const rule = blockingRule(getUnit(battle, 20));
-    battle = updateUnit(battle, unblocked);
-    assert.equal(battle.battlefield.blockingRelations, relations);
-    assert.equal(blockingRule(getUnit(battle, 20)), rule);
-    assertStopped(battle);
-
-    const other = { id: "another-rule", allows: () => true };
-    battle = change(battle, 20, (unit) => ({
-        ...unit, locomotion: { ...unit.locomotion, rules: [other] },
-    }));
-    assert.equal(battle.battlefield.blockingRelations, relations);
-    assert.equal(blockingRule(getUnit(battle, 20)), rule);
-    assert.equal(getUnit(battle, 20).locomotion.rules.find((entry) => entry.id === other.id), other);
-    assert.equal(getUnit(battle, 20).locomotion.rules.length, 2);
-    assertStopped(battle);
-});
-
-test("Blocking rule settlement preserves prior Unit, Locomotion and rule-array snapshots", () => {
-    const original = mover();
-    const blocked = fixture([holder(), original]);
-    const oldMap = blocked.battlefield.units;
-    const oldUnit = getUnit(blocked, 20);
-    const oldLocomotion = oldUnit.locomotion;
-    const oldRules = oldLocomotion.rules;
-    const oldRule = blockingRule(oldUnit);
-    const released = change(blocked, 10, (unit) => ({
-        ...unit, vitality: { ...unit.vitality, hp: 0 },
-    }));
-    assert.equal(blocked.battlefield.units, oldMap);
-    assert.equal(getUnit(blocked, 20), oldUnit);
-    assert.equal(oldUnit.locomotion, oldLocomotion);
-    assert.equal(oldLocomotion.rules, oldRules);
-    assert.deepEqual(oldRules, [oldRule]);
-    assert.deepEqual(original.locomotion.rules, []);
-    assert.deepEqual(battlefieldView(blocked).blockingRelations, [relation(10, 20)]);
-    assert.equal(blockingRule(getUnit(released, 20)), undefined);
-    assert.notEqual(released.battlefield.units, oldMap);
-    assertStopped(blocked);
-    assertMoves(released);
-});
-
-test("Incremental and full settlement publish the same rules and movement across relation and unit changes", () => {
-    const initial = fixture();
-    const branches = [initial, initial];
-    const snapshot = (battle) => JSON.stringify(battle.battlefield, (_key, value) =>
-        value instanceof Map || value instanceof Set ? [...value] : value);
-    const commit = (transform, blockedIds) => {
-        const content = transform(branches[0].battlefield);
-        for (let index = 0; index < branches.length; index++) {
-            const previous = branches[index];
-            const oldSnapshot = snapshot(previous);
-            const next = (index === 0 ? maintain : maintainFully)(previous.battlefield, content);
-            branches[index] = setBattlefield(previous, next);
-            assert.equal(snapshot(previous), oldSnapshot, "settlement must preserve its previous state");
-            for (const id of [20, 21]) {
-                const unit = getUnit(branches[index], id);
-                assert.equal(blockingRule(unit) !== undefined, blockedIds.includes(id));
-                if (blockedIds.includes(id)) assertStopped(branches[index], id);
-                else assertMoves(branches[index], id, unit.layer.type === "AIR" ? "FLY" : "WALK");
-            }
-        }
-        assert.deepEqual(branches[0].battlefield, branches[1].battlefield);
-    };
-    const update = (id, transform) => state => ({
-        ...state, units: new Map([...state.units, [id, transform(state.units.get(id))]]),
+test("Route wait timers continue while blocking prevents position integration", () => {
+    let battle = acquire(fixture([holder(), mover(20, { checkpoints: [{ type: "WAIT", tick: 2 }] })]));
+    const position = getUnit(battle, 20).position;
+    battle = step(battle);
+    assert.deepEqual(getUnit(battle, 20).route.main.phase, {
+        type: "CHECKPOINT", index: 0,
+        checkpointState: { type: "WAITING", deadlineTick: 2 },
     });
-    commit(state => ({ ...state, units: new Map([...state.units, ...[holder(10, { capacity: 2 }), mover(20), mover(21)].map(unit => [unit.id, unit])]) }), [20, 21]);
-    commit(update(20, (unit) => ({ ...unit, locomotion: { ...unit.locomotion, rules: [] } })), [20, 21]);
-    commit(state => ({ ...state, blockingRelations: (state.blockingRelations).filter(relation => relation.blockerUnitId !== 10 && relation.blockedUnitId !== 10) }), [20, 21]);
-    commit(update(20, (unit) => ({ ...unit, layer: { type: "AIR" } })), [21]);
-    commit(update(20, (unit) => ({ ...unit, layer: { type: "GROUND" } })), [20, 21]);
-    commit(update(10, (unit) => ({
-        ...unit, blocker: blocker.setCapacityContribution(unit.blocker, {
-            id: "less-capacity", value: [modifier({ addition: -1 })],
-        }),
-    })), [21]);
-    commit(state => ({ ...state, units: new Map([...state.units].filter(([id]) => id !== 10)) }), []);
-    commit(state => ({ ...state, units: new Map([...state.units, ...[holder(11, { position: [3, 1], capacity: 2 })].map(unit => [unit.id, unit])]) }), [20, 21]);
-    commit(state => ({ ...state, units: new Map([...state.units].map(([id, unit]) => [id, id === 20 ? { ...unit, position: [6, 1] } : unit])), blockingRelations: (state.blockingRelations).filter(relation => relation.blockerUnitId !== 20 && relation.blockedUnitId !== 20) }), [21]);
-    commit(state => ({ ...state, blockingRelations: [relation(11, 20), relation(11, 21)] }), [20, 21]);
-    commit(update(20, (unit) => ({
-        ...unit, blockable: blockable.setVolumeContribution(unit.blockable, { id: "too-large", value: 2 }),
-    })), [21]);
+    battle = step({ ...battle, tick: 1 });
+    assert.equal(getUnit(battle, 20).route.main.phase.checkpointState.deadlineTick, 2);
+    battle = step({ ...battle, tick: 2 });
+    assert.equal(getUnit(battle, 20).route.main.phase.type, "END");
+    assert.deepEqual(getUnit(battle, 20).position, position);
+    assert.deepEqual(getUnit(battle, 20).locomotion.velocity, [0.0625, 0]);
+});
+
+test("Route spatial instructions execute while blocked and release the old relation", () => {
+    let battle = acquire(fixture([holder(), mover(20, { checkpoints: [{ type: "DISAPPEAR" }] })]));
+    battle = step(battle);
+    assert.equal(getUnit(battle, 20).spatialPresence.present, false);
+    assert.equal(ownerId(battle), undefined);
+    assert.deepEqual(blockedIds(battle), []);
+});
+
+test("appearance does not reacquire and disappearance releases immediately", () => {
+    let battle = acquire(fixture([holder(), mover()]));
+    battle = presence.disappear(battle, { id: 10 });
+    assert.equal(ownerId(battle), undefined);
+    assertMoves(battle);
+    battle = presence.appear(battle, { id: 10 }, [2, 1]);
+    assert.equal(ownerId(battle), undefined);
+    battle = acquire(battle);
+    assertStopped(battle);
+    battle = presence.disappear(battle, { id: 20 });
+    assert.equal(ownerId(battle), undefined);
+    assert.deepEqual(blockedIds(battle), []);
 });

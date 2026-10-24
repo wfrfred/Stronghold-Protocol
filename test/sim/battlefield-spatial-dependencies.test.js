@@ -5,7 +5,6 @@ import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/m
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { create as createMap } from '../../dist/core/tactical/battlefield/map/navigation.js';
 import { create as createNavigation } from '../../dist/core/tactical/battlefield/navigation/state.js';
-import { updateBlockingRelations } from '../../dist/core/tactical/battlefield/blocking/relations.js';
 import {
   createBattlefieldState, maintain, maintainFully,
 } from '../../dist/core/tactical/battlefield/storage/state.js';
@@ -123,69 +122,23 @@ test('support ignores reservation changes while occupancy updates selectively', 
   assert.equal(h.state.spatial.occupancyBySlot.has('3:SUPPORT'), false);
 });
 
-function blockingHarness() {
+
+test('Field projections maintain spatial indexes without acquiring or owning blocking relations', () => {
   const h = projectionHarness();
   const blocker = unit(1, [1, 0], {
     vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ALLY' },
     blocker: { capacity: 1, geometry: { radius: 1 } },
   }, { spatialPresence: { present: true } });
-  const blocked = unit(2, [2, 0], {
+  const target = unit(2, [2, 0], {
     vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' },
     blockable: { volume: 1 }, layer: { type: 'GROUND' },
   });
-  h.commit(state => ({ ...state, units: new Map([...state.units, ...[blocker, blocked].map(unit => [unit.id, unit])]) }));
-  assert.deepEqual(h.state.blockingRelations, [{ blockerUnitId: 1, blockedUnitId: 2 }]);
-  return h;
-}
-
-test('blocking retains existing relations beyond acquisition radius and acquires automatically after movement', () => {
-  const h = blockingHarness();
-  const previous = h.state;
-  h.commit(update(1, unit => ({
-    ...unit, vitality: { ...unit.vitality, hp: 50 },
-    blocker: { ...unit.blocker, geometry: { radius: 0 } },
-  })));
-  assert.equal(h.state.blockingRelations, previous.blockingRelations);
-  assert.equal(h.state.spatial, previous.spatial);
-  h.commit(update(2, unit => ({ ...unit, position: [4, 0] })));
-  assert.equal(h.state.blockingRelations, previous.blockingRelations);
-  assert.deepEqual(updateBlockingRelations(h.map, h.state.units, [], h.state.spatial.unitsByTile), []);
-  h.commit(state => ({ ...state, blockingRelations: (state.blockingRelations).filter(relation => relation.blockerUnitId !== 2 && relation.blockedUnitId !== 2) }));
-  h.commit(update(2, unit => ({ ...unit, position: [1, 0] })));
-  assert.deepEqual(h.state.blockingRelations, previous.blockingRelations);
-  assert.deepEqual(updateBlockingRelations(h.map, h.state.units, [], h.state.spatial.unitsByTile), previous.blockingRelations);
-});
-
-for (const [name, mutate] of [
-  ['dies', unit => ({ ...unit, vitality: { ...unit.vitality, hp: 0 } })],
-  ['leaves spatial presence', unit => ({ ...unit, spatialPresence: { present: false } })],
-]) {
-  test(`selective and full blocking projections release relations when the blocker ${name}`, () => {
-    const h = blockingHarness();
-    h.commit(update(1, mutate));
-    assert.deepEqual(h.state.blockingRelations, []);
-    assert.deepEqual(updateBlockingRelations(h.map, h.state.units, [], h.state.spatial.unitsByTile), []);
-  });
-}
-
-test('blocking acquisition preserves unit ID tie breaks, capacity and retained relation order', () => {
-  const h = projectionHarness();
-  const blocker = (id, column) => unit(id, [column, 0], {
-    allegiance: { side: 'ALLY' }, blocker: { capacity: 1, geometry: { radius: 1 } },
-  });
-  const blocked = id => unit(id, [1, 0], {
-    allegiance: { side: 'ENEMY' }, blockable: { volume: 1 },
-  });
-  h.commit(state => ({ ...state, units: new Map([...state.units, ...[blocker(10, 0), blocked(3), blocker(5, 2), blocked(2)].map(unit => [unit.id, unit])]) }));
-  const expected = [
-    { blockerUnitId: 5, blockedUnitId: 2 },
-    { blockerUnitId: 10, blockedUnitId: 3 },
-  ];
-  for (const units of [h.state.units, new Map([...h.state.units].reverse())]) {
-    assert.deepEqual(updateBlockingRelations(h.map, units, [], h.state.spatial.unitsByTile), expected);
-    const retained = [expected[1]];
-    assert.deepEqual(updateBlockingRelations(h.map, units, retained, h.state.spatial.unitsByTile), [expected[1], expected[0]]);
-  }
-  h.commit(state => ({ ...state, blockingRelations: expected }));
-  assert.deepEqual(h.state.blockingRelations, expected);
+  h.commit(register([blocker, target]));
+  assert.equal('blockingRelations' in h.state, false);
+  assert.deepEqual(h.state.units.get(1).blocker.blocked, []);
+  assert.equal(h.state.units.get(2).blockable.blocker, null);
+  h.commit(update(2, unit => ({ ...unit, position: [1.25, 0] })));
+  assert.equal(h.state.units.get(2).blockable.blocker, null);
+  assert.deepEqual(h.state.units.get(1).blocker.blocked, []);
+  assert.deepEqual([...h.state.spatial.unitsByTile.get(1)], [1, 2]);
 });

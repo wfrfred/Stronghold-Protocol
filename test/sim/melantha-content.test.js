@@ -1,3 +1,4 @@
+import { advance as advanceBlocking } from "../../dist/core/tactical/battle/blocking/operations.js";
 import { ref as activationRef } from "../../dist/core/tactical/unit/capability/skill/activation.js";
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -96,7 +97,7 @@ test('the ordinary ground block radius catches a target 0.6 units from Melantha'
     allegiance: { side: 'ENEMY' }, layer: { type: 'GROUND' },
     hitbox: { shape: { type: 'CIRCLE', offset: [0, 0], radius: .1 } },
   } });
-  const state = createBattleState(fixtureBattlefieldState([initialize({ id: 0, position: [0, 0], definition }), receiver]));
+  const state = advanceBlocking(createBattleState(fixtureBattlefieldState([initialize({ id: 0, position: [0, 0], definition }), receiver])));
   assert.deepEqual(battlefieldView(state).blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
 });
 
@@ -111,9 +112,9 @@ test('Melantha still checks active targeting restrictions on enemies she is bloc
       hitbox: { shape: { type: 'CIRCLE', offset: [0, 0], radius: .1 } },
     } });
     const source = initialize({ id: 0, position: [0, 0], definition });
-    const state = createBattleState(fixtureBattlefieldState([source, receiver]));
+    const state = advanceBlocking(createBattleState(fixtureBattlefieldState([source, receiver])));
 
-    assert.deepEqual(state.battlefield.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
+    assert.deepEqual(battlefieldView(state).blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
     assert.deepEqual(select(state, { ...attack.attack.targetGroups[0].targeting, source: unitRef(source) }).value, []);
     const started = startAction(state, unitRef(source), attack);
     assert.deepEqual(started.value, { type: 'REJECTED', reason: 'CONDITION' });

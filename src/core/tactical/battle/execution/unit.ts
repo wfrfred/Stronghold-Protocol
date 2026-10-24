@@ -60,7 +60,12 @@ export function leave(
     }
 
     state = updateUnit(state, { ...unit, lifecycle: "LEAVING" });
-    state = refundUnit(state, unit, reason, state.tick);
+    const leaving = getUnit(state, unitId);
+
+    if (leaving !== undefined) {
+        state = refundUnit(state, leaving, reason, state.tick);
+    }
+
     const current = getUnit(state, unitId);
 
     if (current !== undefined && hasSkill(current) && current.skill.active !== null) {
@@ -80,8 +85,13 @@ export function leave(
 
     state = closeLifetime(state, lifetime, reason);
 
+    const departing = getUnit(state, unitId);
     state = removeUnit(state, unitId, reason);
-    state = recycleUnitCard(state, unit, reason, state.tick);
+
+    if (departing !== undefined) {
+        state = recycleUnitCard(state, departing, reason, state.tick);
+    }
+
     const departure = { unit, reason };
 
     if (unit.definition.onLeave !== undefined) {

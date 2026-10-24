@@ -525,6 +525,8 @@ export class TacticalDemoPresentation {
                 case "DEPLOYMENT_REJECTED":
                 case "UNIT_RELOCATED":
                 case "SUPPORT_LOST":
+                case "BLOCKING_ACQUIRED":
+                case "BLOCKING_RELEASED":
                 case "ROUTE":
                     break;
             }

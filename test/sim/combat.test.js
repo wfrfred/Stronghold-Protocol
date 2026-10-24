@@ -6,7 +6,6 @@ import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js
 import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { fixtureBattlefieldState } from "../helpers/battlefield.js";
-import { replaceUnits } from "../../dist/core/tactical/battlefield/state.js";
 // Combat rules: statuses & immunities, cold→freeze, element bursts, blocking, melee vs FLY, stealth, priorities, healers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -294,7 +293,7 @@ test('core combat: fence units cannot block ground enemies or attack them outsid
       assert.deepEqual(battle.snapshot().blockingRelations, blocksGround
         ? [{ blockerUnitId: 0, blockedUnitId: 1 }] : [], passableMask);
       assert.deepEqual(events.filter(event => event.type === 'ACTION').map(event => event.sourceUnitId),
-        blocksGround && tick === 0 ? [0, 1] : [], passableMask);
+        blocksGround && tick === 1 ? [0, 1] : [], passableMask);
     }
   }
 });
@@ -338,7 +337,7 @@ test('core visibility: consecutive attacks consume the current target HP within 
   assert.equal(battle.snapshot().units.find(unit => unit.id === 2).vitality.hp, 5);
 });
 
-test('core visibility: later enemies immediately see a new blocker after the previous blocker dies', () => {
+test('core visibility: release is immediate and replacement blocking waits for the fixed step', () => {
   const battle = createLegacyCombatBattle({
     rows: 3, columns: 10,
     operators: [
@@ -354,14 +353,26 @@ test('core visibility: later enemies immediately see a new blocker after the pre
         route: coreCombatRoute([1, 6], { spawnOffset: [-0.6, 0] }) },
     ],
   });
-  const { events } = battle.step();
-
-  assert.deepEqual(events.filter(event => event.type === 'UNIT_REMOVED').map(event => event.unitId), [2, 1]);
-  assert.deepEqual(events.filter(event => event.type === 'ACTION').map(event => [event.sourceUnitId, event.targetUnitId]),
-    [[0, 2], [1, 3], [3, 1], [4, 0]]);
-  assert.equal(battle.snapshot().units.find(unit => unit.id === 0).vitality.hp, 990);
+  const first = battle.step();
+  assert.deepEqual(first.events.filter(event => event.type === 'UNIT_REMOVED').map(event => event.unitId), [2]);
+  assert.deepEqual(first.events.filter(event => event.type === 'ACTION').map(event => [event.sourceUnitId, event.targetUnitId]),
+    [[0, 2], [1, 3]]);
   assert.deepEqual(battle.snapshot().blockingRelations,
     [{ blockerUnitId: 0, blockedUnitId: 3 }, { blockerUnitId: 0, blockedUnitId: 4 }]);
+
+  const second = battle.step();
+  assert.deepEqual(second.events.filter(event => event.type === 'UNIT_REMOVED').map(event => event.unitId), [0]);
+  assert.deepEqual(second.events.filter(event => event.type === 'ACTION').map(event => [event.sourceUnitId, event.targetUnitId]),
+    [[3, 0]]);
+  assert.equal(battle.snapshot().units.find(unit => unit.id === 1).vitality.hp, 10);
+  assert.deepEqual(battle.snapshot().blockingRelations,
+    [{ blockerUnitId: 1, blockedUnitId: 3 }, { blockerUnitId: 1, blockedUnitId: 4 }]);
+
+  const third = battle.step();
+  assert.deepEqual(third.events.filter(event => event.type === 'ACTION').map(event => [event.sourceUnitId, event.targetUnitId]),
+    [[4, 1]]);
+  assert.deepEqual(third.events.filter(event => event.type === 'UNIT_REMOVED').map(event => event.unitId), [1]);
+  assert.deepEqual(battle.snapshot().blockingRelations, []);
 });
 
 test('core combat: air targeting follows unit data independently of the route motion mode', () => {
@@ -450,15 +461,15 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
     }) },
     vitality: { ...operator.vitality, hp: 0 },
   };
-  battlefield = replaceUnits(battlefield, [changed]);
-  const draft = battlefieldView({ battlefield });
-  assert.equal(draft.getUnit(0), changed);
+  const updated = updateUnit(createBattleState(battlefield), changed);
+  const draft = battlefieldView(updated);
+  assert.equal(draft.getUnit(0).definition, changed.definition);
+  assert.deepEqual(draft.getUnit(0).blocker.blocked, []);
   assert.deepEqual(draft.blockingRelations, []);
   assert.equal(draft.getUnit(0).action.states.get(actionId).cooldown.readyAtTick, 999999);
   const targetingRequest = { source: unitRef(snapshot.units.find(unit => unit.id === 1)),
     ...operator.definition.action.definitions.values().toArray()[0].attack.targetGroups[0].targeting };
   assert.equal(allowsRestrictions({ battlefield }, targetingRequest, draft.getUnit(0)), false);
-  assert.equal(draft.getUnit(0), changed);
 
   assert.equal(previous.getUnit(0), operator);
   assert.deepEqual(previous.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
