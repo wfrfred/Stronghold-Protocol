@@ -24,7 +24,7 @@ import {
     type View,
 } from "./effect.js";
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
-import { dependents } from "../../battlefield/storage/effect-lifetimes.js";
+import { dependents } from "./dependency.js";
 
 export interface Initial<S extends object> {
     readonly source?: Id | null;
@@ -151,7 +151,7 @@ export function end(battle: BattleState, ref: Ref<View>, reason = "EXPLICIT"): B
         return battle;
     }
 
-    const children = dependents(battlefieldView(battle).effectLifetimes, { type: "EFFECT", ref });
+    const children = dependents(battle.effect.dependency, { type: "EFFECT", ref });
     const host = units.get(battle, ref.host)!;
 
     return host.effects.read(ref.id, (instance) => {
@@ -195,7 +195,7 @@ export function endDependents(
     lifetime: Lifetime,
     reason = "SCOPE_CLOSED",
 ): BattleState {
-    const roots = dependents(battlefieldView(battle).effectLifetimes, lifetime);
+    const roots = dependents(battle.effect.dependency, lifetime);
 
     if (lifetime.type === "UNIT") {
         const hosted =

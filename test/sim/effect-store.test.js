@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
 import { ref } from "../../dist/core/tactical/unit/effect/effect.js";
-import { project, derive, dependents } from "../../dist/core/tactical/battlefield/storage/effect-lifetimes.js";
+import { project, derive, dependents } from "../../dist/core/tactical/unit/effect/dependency.js";
 
 function instance(id, definition, data = definition.initialize(), host = { id: 0 }) {
     return {

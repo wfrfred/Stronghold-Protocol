@@ -7,6 +7,7 @@ import type { MechanismId, Mechanism } from "./mechanism.js";
 import * as support from "../battlefield/support.js";
 import type { Unit, Id } from "../unit/unit.js";
 import { ref } from "../unit/query.js";
+import * as dependency from "../unit/effect/dependency.js";
 import * as blocking from "./blocking/operations.js";
 import type { Event, UnitRemoval, Result as BattleResult } from "./contract.js";
 import type { BattleExecutionState } from "./execution/state.js";
@@ -33,6 +34,9 @@ export interface State {
     readonly tick: number;
     readonly execution: BattleExecutionState;
     readonly deployment: DeploymentState;
+    readonly effect: {
+        readonly dependency: dependency.State;
+    };
     readonly schedule: SpawnScheduleExecution;
     readonly predefinedPresence: readonly PredefinedPresence[];
     readonly completedRouteCount: number;
@@ -62,6 +66,7 @@ export function createBattleState(
         tick,
         execution,
         deployment,
+        effect: { dependency: dependency.project(battlefield.units.values()) },
         schedule,
         predefinedPresence: [],
         completedRouteCount: 0,
@@ -81,16 +86,31 @@ export function setBattlefield(state: State, next: BattlefieldState): State {
 function publishBattlefield(
     state: State,
     next: BattlefieldState,
+    transitions?: readonly dependency.UnitTransition[],
 ): Result<readonly support.Relation[]> {
     if (next === state.battlefield) {
         return { state, value: [] };
     }
 
     const lostSupports = support.lost(state.battlefield, next);
+    const nextDependency =
+        state.battlefield.units === next.units
+            ? state.effect.dependency
+            : dependency.derive(
+                  state.effect.dependency,
+                  transitions ?? effectTransitions(state.battlefield, next),
+              );
 
     return {
         state: appendEvents(
-            { ...state, battlefield: next },
+            {
+                ...state,
+                battlefield: next,
+                effect:
+                    nextDependency === state.effect.dependency
+                        ? state.effect
+                        : { ...state.effect, dependency: nextDependency },
+            },
             lostSupports.map((relation): Event => ({
                 type: "SUPPORT_LOST",
                 supportedUnitId: relation.occupant.id,
@@ -100,6 +120,28 @@ function publishBattlefield(
         ),
         value: lostSupports,
     };
+}
+
+function effectTransitions(
+    previous: BattlefieldState,
+    next: BattlefieldState,
+): readonly dependency.UnitTransition[] {
+    const transitions: dependency.UnitTransition[] = [];
+
+    for (const unit of previous.units.values()) {
+        const current = next.units.get(unit.id);
+
+        if (unit.effects !== current?.effects) {
+            transitions.push({ previousUnit: unit, nextUnit: current });
+        }
+    }
+    for (const unit of next.units.values()) {
+        if (!previous.units.has(unit.id)) {
+            transitions.push({ previousUnit: undefined, nextUnit: unit });
+        }
+    }
+
+    return transitions;
 }
 
 function notifyLostSupports(state: State, lostSupports: readonly support.Relation[]): State {
@@ -164,7 +206,9 @@ export function updateUnit<U extends Unit>(state: State, unit: U): State {
         return state;
     }
 
-    const updated = publishBattlefield(state, battlefield.replaceUnit(state.battlefield, unit));
+    const updated = publishBattlefield(state, battlefield.replaceUnit(state.battlefield, unit), [
+        { previousUnit: previous, nextUnit: unit },
+    ]);
     const synchronized = blocking.synchronize(updated.state, previous, unit);
     state = synchronized.state;
 
@@ -176,7 +220,11 @@ export function updateUnit<U extends Unit>(state: State, unit: U): State {
 }
 
 export function registerUnit<U extends Unit>(state: State, unit: U): State {
-    return blocking.maintain(setBattlefield(state, battlefield.addUnit(state.battlefield, unit)));
+    const updated = publishBattlefield(state, battlefield.addUnit(state.battlefield, unit), [
+        { previousUnit: undefined, nextUnit: unit },
+    ]);
+
+    return blocking.maintain(notifyLostSupports(updated.state, updated.value));
 }
 /* eslint-enable @typescript-eslint/no-unnecessary-type-parameters */
 
@@ -220,7 +268,12 @@ export function removeUnit(
         }
     }
 
-    const next = setBattlefield(state, battlefield.removeUnit(state.battlefield, ref(unit)));
+    const updated = publishBattlefield(
+        state,
+        battlefield.removeUnit(state.battlefield, ref(unit)),
+        [{ previousUnit: unit, nextUnit: undefined }],
+    );
+    const next = notifyLostSupports(updated.state, updated.value);
 
     return blocking.maintain({
         ...next,

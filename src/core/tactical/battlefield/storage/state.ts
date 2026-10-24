@@ -15,7 +15,6 @@ import {
     type BattlefieldSpatialView,
 } from "./indexes.js";
 import type { TileOccupancy } from "../occupancy.js";
-import { derive, project, type Index } from "./effect-lifetimes.js";
 
 export interface BattlefieldContent<U extends Unit> {
     readonly projectiles: Projectiles;
@@ -26,7 +25,6 @@ export interface BattlefieldState<U extends Unit> extends BattlefieldContent<U> 
     readonly navigation: NavigationState;
     readonly occupancy: ReadonlyMap<number, TileOccupancy>;
     readonly spatial: BattlefieldSpatialView;
-    readonly effectLifetimes: Index;
 }
 
 export function createBattlefieldState<U extends Unit>(
@@ -41,7 +39,6 @@ export function createBattlefieldState<U extends Unit>(
         occupancy: new Map(),
         navigation,
         spatial: projectBattlefieldSpatial(map, units),
-        effectLifetimes: project(units.values()),
     };
 }
 
@@ -50,16 +47,14 @@ function finishSettlement<U extends Unit>(
     content: BattlefieldContent<U>,
     occupancy: ReadonlyMap<number, TileOccupancy>,
     spatial: BattlefieldSpatialView,
-    effectLifetimes: Index,
 ): FieldState<U> {
     const unchanged =
         content.units === previous.units &&
         content.projectiles === previous.projectiles &&
         occupancy === previous.occupancy &&
-        spatial === previous.spatial &&
-        effectLifetimes === previous.effectLifetimes;
+        spatial === previous.spatial;
 
-    return unchanged ? previous : { ...previous, ...content, occupancy, spatial, effectLifetimes };
+    return unchanged ? previous : { ...previous, ...content, occupancy, spatial };
 }
 
 export function maintain<U extends Unit>(
@@ -83,14 +78,5 @@ export function maintain<U extends Unit>(
               )
             : previous.occupancy,
         dependencies.unitTiles ? projectUnitsByTile(map, content.units) : previous.spatial,
-        content.units === previous.units
-            ? previous.effectLifetimes
-            : derive(
-                  previous.effectLifetimes,
-                  [...changes.updatedUnitIds].map((unitId) => ({
-                      previousUnit: previous.units.get(unitId),
-                      nextUnit: content.units.get(unitId),
-                  })),
-              ),
     );
 }

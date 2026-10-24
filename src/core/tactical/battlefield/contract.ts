@@ -4,7 +4,6 @@ import type { Unit, Id } from "../unit/unit.js";
 import type { Slot } from "../unit/capability/occupancy/capability.js";
 import type { BattlefieldMap } from "./map/map.js";
 import type { ProjectileView } from "./projectile/projectile.js";
-import type { Index } from "./storage/effect-lifetimes.js";
 
 export type BattlefieldRemovalReason = "DEATH" | "RETREAT" | "EXPIRED" | "SCRIPT";
 
@@ -26,7 +25,6 @@ export interface BattlefieldView<U extends Unit = Unit> extends ProjectileView {
     readonly map: BattlefieldMap;
     readonly navigation: NavigationState;
     readonly unitIds: readonly Id[];
-    readonly effectLifetimes: Index;
     readonly blockingRelations: readonly BlockingRelation[];
     readonly supportRelations: readonly SupportRelation[];
     getUnit(id: Id): U | undefined;

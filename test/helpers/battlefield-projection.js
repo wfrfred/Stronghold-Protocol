@@ -1,5 +1,4 @@
 import { projectBattlefieldSpatial } from "../../dist/core/tactical/battlefield/storage/indexes.js";
-import { project } from "../../dist/core/tactical/battlefield/storage/effect-lifetimes.js";
 import { ref } from "../../dist/core/tactical/unit/query.js";
 
 function occupancyFor(map, units) {
@@ -29,6 +28,5 @@ export function maintainFully(previous, content) {
         ...content,
         occupancy: occupancyFor(previous.map, content.units),
         spatial: projectBattlefieldSpatial(previous.map, content.units),
-        effectLifetimes: project(content.units.values()),
     };
 }

@@ -39,7 +39,6 @@ export function view<U extends Unit>(state: State<U>): BattlefieldView<U> {
     return {
         map,
         navigation: state.navigation,
-        effectLifetimes: state.effectLifetimes,
         get blockingRelations() {
             return projectBlocking(state.units);
         },
