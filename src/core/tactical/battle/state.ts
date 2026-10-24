@@ -2,7 +2,8 @@ import type { BattlefieldRemovalReason, BattlefieldView } from "../battlefield/c
 import * as battlefield from "../battlefield/state.js";
 import type { State as BattlefieldState } from "../battlefield/state.js";
 import { view } from "../battlefield/view.js";
-import { ref as mechanismRef, type MechanismId, type Mechanism } from "../battlefield/mechanism.js";
+import { assertNonnegativeSafeInteger } from "../../common/assert.js";
+import type { MechanismId, Mechanism } from "./mechanism.js";
 import { getLostSupports } from "../battlefield/support/relations.js";
 import type { Unit, Id } from "../unit/unit.js";
 import { ref } from "../unit/query.js";
@@ -28,6 +29,7 @@ const defaultExecution: BattleExecutionState = {
 
 export interface State {
     readonly battlefield: BattlefieldState;
+    readonly mechanisms: ReadonlyMap<MechanismId, Mechanism>;
     readonly tick: number;
     readonly execution: BattleExecutionState;
     readonly deployment: DeploymentState;
@@ -56,6 +58,7 @@ export function createBattleState(
 ): State {
     return {
         battlefield,
+        mechanisms: new Map<MechanismId, Mechanism>(),
         tick,
         execution,
         deployment,
@@ -99,31 +102,37 @@ export function getUnit(state: State, id: Id): Unit | undefined {
 }
 
 export function getMechanism(state: State, id: MechanismId): Mechanism | undefined {
-    return state.battlefield.mechanisms.get(id);
+    return state.mechanisms.get(id);
 }
 
 export function updateMechanism(state: State, mechanism: Mechanism): State {
     const current = getMechanism(state, mechanism.id);
 
-    return current === mechanism
-        ? state
-        : setBattlefield(
-              state,
-              current === undefined
-                  ? battlefield.addMechanism(state.battlefield, mechanism)
-                  : battlefield.replaceMechanism(state.battlefield, mechanism),
-          );
+    if (current === mechanism) {
+        return state;
+    }
+
+    assertNonnegativeSafeInteger(mechanism.id, "mechanism id");
+
+    if (current !== undefined && current.definition !== mechanism.definition) {
+        throw new RangeError("mechanism definition cannot change during update");
+    }
+
+    const mechanisms = new Map(state.mechanisms);
+    mechanisms.set(mechanism.id, mechanism);
+
+    return { ...state, mechanisms };
 }
 
 export function removeMechanism(state: State, id: MechanismId): State {
-    const mechanism = getMechanism(state, id);
+    if (!state.mechanisms.has(id)) {
+        return state;
+    }
 
-    return mechanism === undefined
-        ? state
-        : setBattlefield(
-              state,
-              battlefield.removeMechanism(state.battlefield, mechanismRef(mechanism)),
-          );
+    const mechanisms = new Map(state.mechanisms);
+    mechanisms.delete(id);
+
+    return { ...state, mechanisms };
 }
 
 /* eslint-disable @typescript-eslint/no-unnecessary-type-parameters -- Accept capability-bearing object literals while returning only State. */

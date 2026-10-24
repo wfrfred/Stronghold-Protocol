@@ -1,14 +1,9 @@
 import { assertNonnegativeSafeInteger } from "../../common/assert.js";
 import type { Identified, Ref } from "../../common/ref.js";
-import type { State as BattleState } from "../battle/state.js";
+import type { State as BattleState } from "./state.js";
 import type { Departure } from "../unit/unit.js";
 
 export type MechanismId = number;
-
-export interface MechanismView {
-    readonly mechanismIds: readonly MechanismId[];
-    getMechanism(id: MechanismId): Mechanism | undefined;
-}
 
 export interface MechanismDefinition {
     readonly id: string;

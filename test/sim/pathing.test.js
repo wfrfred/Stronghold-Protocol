@@ -18,7 +18,6 @@ import {
   createBattlefieldState, maintain,
 } from '../../dist/core/tactical/battlefield/storage/state.js';
 import { maintainFully } from '../helpers/battlefield-projection.js';
-import { createMechanismDefinition, createMechanism } from '../../dist/core/tactical/battlefield/mechanism.js';
 import { Map as NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
 import { apply, create as createOverlay } from '../../dist/core/tactical/battlefield/navigation/overlay.js';
 import { create as createNavigation, setOverlay, removeOverlay, nextPoint } from '../../dist/core/tactical/battlefield/navigation/state.js';
@@ -328,9 +327,6 @@ test('core smoothing uses the current row-major successor chain without a weight
 const battlefieldUnit = (id, position) => ({
   effects:Effects.empty(), id, definition: Object.freeze({ id: `battlefield_unit_${id}` }), position: Object.freeze([...position]),
 });
-const battlefieldMechanism = (id, active = true) => createMechanism({
-  id, definition: createMechanismDefinition({ id: `battlefield_mechanism_${id}` }), active,
-});
 
 function projectionFacts(state) {
   const definitionFacts = ({ initialize, start, step, onEnd, ...definition }) => definition;
@@ -368,9 +364,7 @@ function battlefieldProjectionHarness(rows = 2, columns = 5,
   const equivalent = () => {
     const [selective, full] = branches.map(branch => branch.state);
     assert.deepEqual(selective, full);
-    for (const key of ['units', 'mechanisms']) {
-      assert.deepEqual([...selective[key]], [...full[key]]);
-    }
+    assert.deepEqual([...selective.units], [...full.units]);
     for (const key of ['unitsByTile', 'occupancyBySlot']) {
       const entries = state => [...state.spatial[key]].map(([key, ids]) => [key, [...ids]]);
       assert.deepEqual(entries(selective), entries(full));
@@ -421,7 +415,6 @@ test('core selective projection retains untouched collections, indexes and route
     ...state.units.get(1), vitality: { ...state.units.get(1).vitality, hp: 90 },
   }].map(unit => [unit.id, unit])]) }));
   assert.notEqual(h.state.units, previous.units);
-  assert.equal(h.state.mechanisms, previous.mechanisms);
   assert.equal(h.state.spatial, previous.spatial);
   assert.equal(h.state.supportRelations, previous.supportRelations);
   assert.equal('blockingRelations' in h.state, false);

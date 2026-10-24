@@ -23,7 +23,7 @@ import { create as createFieldState, addUnit, addUnits, replaceUnit, replaceUnit
 import { maintain } from '../../dist/core/tactical/battlefield/storage/state.js';
 import { createBattleState, updateUnit as updateBattleUnit, removeUnit as removeBattleUnit } from '../../dist/core/tactical/battle/state.js';
 import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
-import { createMechanismDefinition } from '../../dist/core/tactical/battlefield/mechanism.js';
+import { createMechanismDefinition } from '../../dist/core/tactical/battle/mechanism.js';
 
 import { hasSpatialPresence, isSpatiallyPresent } from '../../dist/core/tactical/unit/capability/presence/capability.js';
 import { initialize } from "../helpers/unit.js";

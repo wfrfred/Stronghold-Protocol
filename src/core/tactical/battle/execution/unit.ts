@@ -98,7 +98,7 @@ export function leave(
         state = unit.definition.onLeave(state, departure);
     }
 
-    const mechanismIds = [...state.battlefield.mechanisms.keys()];
+    const mechanismIds = [...state.mechanisms.keys()];
 
     for (const mechanismId of mechanismIds) {
         const mechanism = getMechanism(state, mechanismId);

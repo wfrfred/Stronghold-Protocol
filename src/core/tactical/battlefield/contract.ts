@@ -3,7 +3,6 @@ import type { State as NavigationState } from "./navigation/state.js";
 import type { Unit, Id } from "../unit/unit.js";
 import type { OccupancySlot } from "../unit/capability/occupancy/capability.js";
 import type { BattlefieldMap } from "./map/map.js";
-import type { MechanismView } from "./mechanism.js";
 import type { SupportRelation } from "./support/relations.js";
 import type { ProjectileView } from "./projectile/projectile.js";
 import type { Index } from "./storage/effect-lifetimes.js";
@@ -19,7 +18,7 @@ export interface BlockingRelation {
     readonly blockedUnitId: Id;
 }
 
-export interface BattlefieldView<U extends Unit = Unit> extends MechanismView, ProjectileView {
+export interface BattlefieldView<U extends Unit = Unit> extends ProjectileView {
     readonly map: BattlefieldMap;
     readonly navigation: NavigationState;
     readonly unitIds: readonly Id[];

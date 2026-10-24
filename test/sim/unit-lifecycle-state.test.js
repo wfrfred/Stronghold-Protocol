@@ -1,14 +1,14 @@
-import { addMechanism, removeMechanism, replaceMechanism } from '../../dist/core/tactical/battlefield/state.js';
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  setBattlefield, battlefieldView, createBattleState, getUnit, registerUnit, updateUnit,
+  battlefieldView, createBattleState, getUnit, registerUnit, updateUnit,
+  getMechanism, updateMechanism, removeMechanism,
 } from "../../dist/core/tactical/battle/state.js";
 import { enter, leave } from "../../dist/core/tactical/battle/execution/unit.js";
 import { initialize } from "../helpers/unit.js";
 
-import { createMechanism, createMechanismDefinition } from "../../dist/core/tactical/battlefield/mechanism.js";
+import { createMechanism, createMechanismDefinition } from "../../dist/core/tactical/battle/mechanism.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { createDefinition as createSkillDefinition, setEndedHook } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activate, finish } from "../../dist/core/tactical/unit/capability/skill/operations.js";
@@ -252,9 +252,7 @@ test("onLeave reads the pre-cleanup Unit after removal and passes its changes to
       },
     }),
   });
-  let state = createBattleState(fixtureBattlefield([host, unit(1)], {
-    mechanismIds: [4], getMechanism: () => mechanism,
-  }));
+  let state = updateMechanism(createBattleState(fixtureBattlefield([host, unit(1)])), mechanism);
   state = activate(state, unitRef(getUnit(state, 0))).state;
   state = effects.install(state, unitRef(getUnit(state, 0)), {
     id: "leave-effect", initialize: () => ({}),
@@ -288,9 +286,9 @@ test("mechanism leave responses keep their candidate IDs and reread current regi
       id: "first-observer",
       onUnitLeave(state) {
         trace.push("first");
-        let battlefield = removeMechanism(state.battlefield, { id: 1 });
-        battlefield = replaceMechanism(battlefield, { ...battlefield.mechanisms.get(2), active: true });
-        return setBattlefield(state, addMechanism(battlefield, later));
+        state = removeMechanism(state, 1);
+        state = updateMechanism(state, { ...getMechanism(state, 2), active: true });
+        return updateMechanism(state, later);
       },
     } }),
     createMechanism({ id: 1, active: true, definition: {
@@ -302,13 +300,11 @@ test("mechanism leave responses keep their candidate IDs and reread current regi
       onUnitLeave(state) { trace.push("activated observer"); return state; },
     } }),
   ];
-  const original = createBattleState(fixtureBattlefield([unit(0)], {
-    mechanismIds: [0, 1, 2], getMechanism: id => mechanisms[id],
-  }));
+  const original = mechanisms.reduce(updateMechanism, createBattleState(fixtureBattlefield([unit(0)])));
   const state = leave(original, 0, "SCRIPT");
   assert.deepEqual(trace, ["first", "activated observer"]);
-  assert.deepEqual(battlefieldView(state).mechanismIds, [0, 2, 3]);
-  assert.deepEqual(battlefieldView(original).mechanismIds, [0, 1, 2]);
+  assert.deepEqual([...state.mechanisms.keys()], [0, 2, 3]);
+  assert.deepEqual([...original.mechanisms.keys()], [0, 1, 2]);
 });
 
 test("initialized Units retain onLeave and call it only for an actual departure", () => {

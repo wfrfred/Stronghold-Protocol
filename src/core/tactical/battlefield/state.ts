@@ -3,7 +3,6 @@ import type { Ref } from "../../common/ref.js";
 import type { Unit, Id } from "../unit/unit.js";
 import type { BattlefieldRuntimeOptions } from "./contract.js";
 import type { BattlefieldMap } from "./map/map.js";
-import type { Mechanism } from "./mechanism.js";
 import * as maps from "./map/navigation.js";
 import * as navigation from "./navigation/state.js";
 import { createBattlefieldState, maintain, type BattlefieldState } from "./storage/state.js";
@@ -114,47 +113,6 @@ export function removeUnit<U extends Unit>(state: State<U>, reference: Ref<Unit>
             unitOrderChanged: true,
         },
     );
-}
-
-export function addMechanism<U extends Unit>(state: State<U>, mechanism: Mechanism): State<U> {
-    assertNonnegativeSafeInteger(mechanism.id, "mechanism id");
-
-    if (state.mechanisms.has(mechanism.id)) {
-        throw new RangeError(`duplicate mechanism: ${mechanism.id}`);
-    }
-
-    const mechanisms = new Map(state.mechanisms);
-    mechanisms.set(mechanism.id, mechanism);
-
-    return maintain(state, { ...state, mechanisms });
-}
-
-export function replaceMechanism<U extends Unit>(state: State<U>, mechanism: Mechanism): State<U> {
-    const previous = requireEntry(state.mechanisms, mechanism.id, "mechanism");
-
-    if (previous.definition !== mechanism.definition) {
-        throw new RangeError("mechanism definition cannot change during update");
-    }
-
-    if (previous === mechanism) {
-        return state;
-    }
-
-    const mechanisms = new Map(state.mechanisms);
-    mechanisms.set(mechanism.id, mechanism);
-
-    return maintain(state, { ...state, mechanisms });
-}
-
-export function removeMechanism<U extends Unit>(
-    state: State<U>,
-    reference: Ref<Mechanism>,
-): State<U> {
-    requireEntry(state.mechanisms, reference.id, "mechanism");
-    const mechanisms = new Map(state.mechanisms);
-    mechanisms.delete(reference.id);
-
-    return maintain(state, { ...state, mechanisms });
 }
 
 export function setNavigation<U extends Unit>(state: State<U>, next: navigation.State): State<U> {

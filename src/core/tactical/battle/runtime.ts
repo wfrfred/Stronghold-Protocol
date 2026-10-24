@@ -132,7 +132,7 @@ export class BattleRuntime {
             units: view.unitIds.map((id) => copy(view.getUnit(id)!)),
             blockingRelations: view.blockingRelations,
             supportRelations: view.supportRelations,
-            mechanisms: view.mechanismIds.map((id) => view.getMechanism(id)!),
+            mechanisms: [...this.#state.mechanisms.values()],
             navigation: this.#state.battlefield.navigation,
             completedRouteCount,
             result,

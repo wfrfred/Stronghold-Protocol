@@ -5,7 +5,7 @@ import type { MechanismPlacementDefinition } from "./creation/mechanism.js";
 import type { SpawnScheduleDefinition } from "./schedule/definition.js";
 import type { BattlefieldRemovalReason, BlockingRelation } from "../battlefield/contract.js";
 import type { CombatEvent } from "./execution/event.js";
-import type { Mechanism } from "../battlefield/mechanism.js";
+import type { Mechanism } from "./mechanism.js";
 import type { State as NavigationState } from "../battlefield/navigation/state.js";
 import type { WorldPosition } from "../geometry/coordinate.js";
 import type { Signal as RouteSignal } from "../unit/capability/route/operations.js";

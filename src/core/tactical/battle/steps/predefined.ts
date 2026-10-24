@@ -1,6 +1,6 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import type { BattlefieldRemovalReason, BattlefieldView } from "../../battlefield/contract.js";
-import type { MechanismDefinition } from "../../battlefield/mechanism.js";
+import type { MechanismDefinition } from "../mechanism.js";
 import {
     createUnitPlacementDefinition,
     instantiateUnitPlacement,

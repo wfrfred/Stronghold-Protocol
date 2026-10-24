@@ -7,7 +7,7 @@ import {
     createPredefinedDefinition,
     type PredefinedDefinition,
 } from "../../core/tactical/battle/steps/predefined.js";
-import { createMechanismDefinition } from "../../core/tactical/battlefield/mechanism.js";
+import { createMechanismDefinition } from "../../core/tactical/battle/mechanism.js";
 import { Tile } from "../../core/tactical/geometry/coordinate.js";
 import { create as tileCost } from "../../content/tactical/effects/tile-cost.js";
 import { install } from "../../core/tactical/unit/effect/operations.js";

@@ -1,9 +1,5 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
-import {
-    createMechanism,
-    type MechanismDefinition,
-    type Mechanism,
-} from "../../battlefield/mechanism.js";
+import { createMechanism, type MechanismDefinition, type Mechanism } from "../mechanism.js";
 import type { BattleExecutionState } from "../execution/state.js";
 
 export interface MechanismPlacementDefinition<D extends MechanismDefinition = MechanismDefinition> {

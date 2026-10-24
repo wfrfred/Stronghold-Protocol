@@ -8,7 +8,6 @@ import {
     type BattlefieldDependencyChanges,
 } from "./dependencies.js";
 import type { BattlefieldMap } from "../map/map.js";
-import type { MechanismId, Mechanism } from "../mechanism.js";
 import {
     projectBattlefieldSpatial,
     projectUnitsByTile,
@@ -26,7 +25,6 @@ export interface BattlefieldContent<U extends Unit> {
     readonly projectiles: Projectiles;
     readonly units: ReadonlyMap<Id, U>;
     readonly supportRelations: readonly SupportRelation[];
-    readonly mechanisms: ReadonlyMap<MechanismId, Mechanism>;
 }
 
 export interface BattlefieldState<U extends Unit> extends BattlefieldContent<U> {
@@ -44,7 +42,6 @@ export function createBattlefieldState<U extends Unit>(
     return {
         units,
         projectiles: Projectiles.empty(),
-        mechanisms: new Map<MechanismId, Mechanism>(),
         supportRelations: [],
         navigation,
         spatial: projectBattlefieldSpatial(map, units),
@@ -61,7 +58,6 @@ function finishSettlement<U extends Unit>(
     const unchanged =
         content.units === previous.units &&
         content.projectiles === previous.projectiles &&
-        content.mechanisms === previous.mechanisms &&
         content.supportRelations === previous.supportRelations &&
         spatial === previous.spatial &&
         effectLifetimes === previous.effectLifetimes;

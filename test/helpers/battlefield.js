@@ -13,18 +13,16 @@ const tile = createTile({
 });
 const defaultMap = createBattlefieldMap(1, 32, Array(32).fill(tile));
 
-export function fixtureBattlefieldState(input, mechanisms = input) {
+export function fixtureBattlefieldState(input) {
     if (input.units instanceof Map && input.navigation !== undefined) return input;
     const units = Array.isArray(input) ? input : input.unitIds.map((id) => input.getUnit(id));
     let state = create({ map: Array.isArray(input) ? defaultMap : (input.map ?? defaultMap) });
     if (input.navigation !== undefined) state = { ...state, navigation: input.navigation };
-    const registeredMechanisms = (mechanisms?.mechanismIds ?? []).map(id => [id, mechanisms.getMechanism(id)]);
     for (const id of input.projectileIds ?? [])
         state = { ...state, projectiles: state.projectiles.add(input.getProjectile(id)) };
     return maintain(state, {
         ...state,
         units: new Map(units.map(unit => [unit.id, unit])),
-        mechanisms: new Map(registeredMechanisms),
         supportRelations: input.supportRelations?.length ? input.supportRelations : state.supportRelations,
     });
 }

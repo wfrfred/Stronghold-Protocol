@@ -20,7 +20,7 @@ import { EV } from '../../shared/protocol.js';
 import { getDefaultSource, spawnsFromTemplate, hasGeneratedData } from '../../server/sim/simdata.js';
 import { LocalBossPool } from '../../server/sim/spec.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
-import { createMechanismDefinition, createMechanism } from '../../dist/core/tactical/battlefield/mechanism.js';
+import { createMechanismDefinition, createMechanism } from '../../dist/core/tactical/battle/mechanism.js';
 
 import { createRng } from '../../dist/core/common/rng.js';
 import { BattleRuntime, simulateBattle } from '../../dist/core/tactical/battle/runtime.js';
@@ -1091,7 +1091,7 @@ test('core battle publishes a completed tick only after all operations succeed',
     const lifecycle = { id: 'late-failure-rule', initialize: () => ({}), onTick(state, context) {
       if (context.tick !== 1) return state;
       assert.ok(state.battlefield.units.size > observedSnapshot.units.length);
-      assert.ok(state.battlefield.mechanisms.has(1));
+      assert.ok(state.mechanisms.has(1));
       assert.deepEqual(observedRuntime.snapshot(), observedSnapshot);
       assert.equal(observedRuntime.navigation, observedMaps);
       if (failureEnabled) { failures++; throw new Error('late-stage failure'); }

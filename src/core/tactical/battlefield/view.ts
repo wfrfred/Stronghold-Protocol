@@ -49,10 +49,6 @@ export function view<U extends Unit>(state: State<U>): BattlefieldView<U> {
         },
         getProjectile: <P extends ProjectileView>(reference: Ref<P>) =>
             state.projectiles.get(reference),
-        get mechanismIds() {
-            return [...state.mechanisms.keys()];
-        },
-        getMechanism: (id) => state.mechanisms.get(id),
         getUnit: (id) => state.units.get(id),
         unitsAt: (position) => {
             const key = battlefieldTileKey(map, position);
