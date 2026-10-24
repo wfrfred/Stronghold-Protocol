@@ -89,7 +89,7 @@ test("sequential predefined commands allocate after all earlier callback results
     state = install(state, unitRef(getUnit(state, 0)), {
         id: "birth-on-end",
         initialize: () => ({}),
-        onEnd(state, context) {
+        onEnd(state) {
             const created = instantiateUnitPlacement(
                 state,
                 { definition: { id: "callback-child" }, position: [1, 0] },

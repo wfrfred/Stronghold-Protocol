@@ -99,8 +99,8 @@ test("Unit ticks skip departing or removed units and defer units created by a ti
 test("Runtime advances Unit content once per Tick before Effect callbacks", () => {
     const trace = [];
     let original;
-    const observer = { id: "phase-observer", initialize: () => ({}), onTick(state, context) {
-        trace.push(["effect", state.tick, getUnit(state, context.unit.id).state.phase]);
+    const observer = { id: "phase-observer", initialize: () => ({}), onTick(state, self) {
+        trace.push(["effect", state.tick, getUnit(state, self.host.id).state.phase]);
         return state;
     } };
     const battle = runtime([{

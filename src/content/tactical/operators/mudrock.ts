@@ -19,7 +19,7 @@ import type { HealingRequest } from "../../../core/tactical/battle/healing/contr
 import { calculateDamage } from "../../../core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../../../core/tactical/battle/damage/apply.js";
 import type { DamageRequest } from "../../../core/tactical/battle/damage/contract.js";
-import { ref as unitRef } from "../../../core/tactical/unit/query.js";
+import { get as getCurrentUnit, ref as unitRef } from "../../../core/tactical/unit/query.js";
 import { blocked } from "../../../core/tactical/battle/blocking/query.js";
 import { hasBlocker } from "../../../core/tactical/unit/capability/blocking/blocker.js";
 import type { Profile } from "../../../data/arknights/operator.js";
@@ -54,6 +54,7 @@ import {
 } from "../../../core/tactical/unit/capability/vitality/capability.js";
 import { removeHook, setHook } from "../../../core/tactical/battle/damage/hook.js";
 import type { Definition as EffectDefinition } from "../../../core/tactical/unit/effect/definition.js";
+import { ref as effectRef } from "../../../core/tactical/unit/effect/effect.js";
 import { get, install, update } from "../../../core/tactical/unit/effect/operations.js";
 
 export interface Definition
@@ -172,10 +173,18 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
     const definition: EffectDefinition<ShieldState, Vitality> = {
         id: SHIELD_ID,
         initialize: () => ({ layers: initialLayers, timer: interval, lastTick: 0 }),
-        onInstall: (state, { ref, tick }) =>
-            update(state, ref, (data) => ({ ...data, lastTick: tick })),
-        onEnable: (state, { unit, ref, self }) =>
-            updateUnit(state, {
+        onInstall: (state, self) =>
+            update(state, effectRef(self), (data) => ({ ...data, lastTick: state.tick })),
+        onEnable: (state, self) => {
+            const unit = getCurrentUnit(state, self.host);
+
+            if (unit === undefined) {
+                return state;
+            }
+
+            const ref = effectRef(self);
+
+            return updateUnit(state, {
                 ...unit,
                 vitality: setHook(unit.vitality, {
                     id: `${SHIELD_ID}/${self.id}`,
@@ -184,11 +193,13 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
                     accepts: () => true,
                     invoke(state, context, pending) {
                         const shield = get(state, ref);
+                        const host = getCurrentUnit(state, self.host);
 
                         if (
                             pending.cancellation !== null ||
                             pending.amount <= 0 ||
-                            shield?.status !== "ACTIVE"
+                            shield?.status !== "ACTIVE" ||
+                            host === undefined
                         ) {
                             return { state, value: pending };
                         }
@@ -197,8 +208,8 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
                                 ...data,
                                 layers: data.layers - 1,
                             }));
-                            state = healSelf(state, unit.id, healRatio);
-                            const current = getUnit(state, unit.id);
+                            state = healSelf(state, self.host.id, healRatio);
+                            const current = getCurrentUnit(state, self.host);
 
                             if (current !== undefined && hasSkill(current)) {
                                 state = modify(state, unitRef(current), extraSp).state;
@@ -223,8 +234,8 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
                             : 1;
                         const blockingScale =
                             sourceId !== null &&
-                            hasBlocker(unit) &&
-                            blocked(state, unitRef(unit)).some((ref) => ref.id === sourceId)
+                            hasBlocker(host) &&
+                            blocked(state, unitRef(host)).some((ref) => ref.id === sourceId)
                                 ? blockedDamageScale
                                 : 1;
 
@@ -237,14 +248,20 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
                         };
                     },
                 }),
-            }),
-        onDisable: (state, { unit, self }) =>
-            updateUnit(state, {
-                ...unit,
-                vitality: removeHook(unit.vitality, `${SHIELD_ID}/${self.id}`),
-            }),
-        onTick(state, { self, ref, tick }) {
-            const elapsed = tick - self.data.lastTick;
+            });
+        },
+        onDisable: (state, self) => {
+            const unit = getCurrentUnit(state, self.host);
+
+            return unit === undefined
+                ? state
+                : updateUnit(state, {
+                      ...unit,
+                      vitality: removeHook(unit.vitality, `${SHIELD_ID}/${self.id}`),
+                  });
+        },
+        onTick(state, self) {
+            const elapsed = state.tick - self.data.lastTick;
 
             if (elapsed <= 0) {
                 return state;
@@ -253,11 +270,11 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
             const remaining = self.data.timer - elapsed;
             const pulses = remaining <= 0 ? Math.floor(-remaining / interval) + 1 : 0;
 
-            return update(state, ref, (data) => ({
+            return update(state, effectRef(self), (data) => ({
                 ...data,
                 layers: Math.min(capacity, data.layers + pulses),
                 timer: remaining + pulses * interval,
-                lastTick: tick,
+                lastTick: state.tick,
             }));
         },
     };

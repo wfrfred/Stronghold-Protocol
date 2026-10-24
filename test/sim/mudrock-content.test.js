@@ -4,6 +4,8 @@ import { fixtureBattle, fixtureDefinition } from "../helpers/unit.js";
 import { ref as activationRef } from "../../dist/core/tactical/unit/capability/skill/activation.js";
 import { healing } from "../helpers/vitality.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
+import { get as unitQueryGet } from "../../dist/core/tactical/unit/query.js";
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -117,7 +119,10 @@ test("an earlier barrier exhausts its budget without consuming Mudrock's shield 
     const barrier = {
         id: "test/barrier",
         initialize: () => ({ remaining: 5000 }),
-        onEnable: (state, { unit, self, ref }) => updateUnit(state, {
+        onEnable: (state, self) => {
+            const unit = unitQueryGet(state, self.host);
+            const ref = effectRef(self);
+            return updateUnit(state, {
             ...unit,
             vitality: setHook(unit.vitality, {
                 id: `barrier/${self.id}`,
@@ -133,10 +138,14 @@ test("an earlier barrier exhausts its budget without consuming Mudrock's shield 
                     return { state, value: { ...pending, amount: pending.amount - absorbed } };
                 },
             }),
-        }),
-        onDisable: (state, { unit, self }) => updateUnit(state, {
-            ...unit, vitality: removeHook(unit.vitality, `barrier/${self.id}`),
-        }),
+            });
+        },
+        onDisable: (state, self) => {
+            const unit = unitQueryGet(state, self.host);
+            return updateUnit(state, {
+                ...unit, vitality: removeHook(unit.vitality, `barrier/${self.id}`),
+            });
+        },
     };
     const wounded = hp(fixture.state, 1000);
     const installed = install(wounded, unitRef(getUnit(wounded, 0)), barrier);

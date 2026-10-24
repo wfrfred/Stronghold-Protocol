@@ -4,7 +4,7 @@ import { create as createAttack } from "../actions/attack.js";
 import * as filters from "../../../core/tactical/battle/targeting/filter.js";
 import * as compare from "../../../core/tactical/battle/targeting/compare.js";
 import { first } from "../../../core/tactical/battle/targeting/selector.js";
-import { ref as unitRef } from "../../../core/tactical/unit/query.js";
+import { get as getCurrentUnit, ref as unitRef } from "../../../core/tactical/unit/query.js";
 import type { Profile } from "../../../data/arknights/operator.js";
 import { getUnit, updateUnit } from "../../../core/tactical/battle/state.js";
 import type { Definition as UnitDefinition } from "../../../core/tactical/unit/unit.js";
@@ -51,19 +51,29 @@ function attackBonus(id: string, amount: number): EffectDefinition<object, Offen
     return {
         id,
         initialize: () => ({}),
-        onEnable: (state, { unit, self }) =>
-            updateUnit(state, {
-                ...unit,
-                offense: setAttackContribution(unit.offense, {
-                    id: `effect/${self.id}/attack`,
-                    value: [attribute.create({ multiplier: amount })],
-                }),
-            }),
-        onDisable: (state, { unit, self }) =>
-            updateUnit(state, {
-                ...unit,
-                offense: removeAttackContribution(unit.offense, `effect/${self.id}/attack`),
-            }),
+        onEnable: (state, self) => {
+            const unit = getCurrentUnit(state, self.host);
+
+            return unit === undefined
+                ? state
+                : updateUnit(state, {
+                      ...unit,
+                      offense: setAttackContribution(unit.offense, {
+                          id: `effect/${self.id}/attack`,
+                          value: [attribute.create({ multiplier: amount })],
+                      }),
+                  });
+        },
+        onDisable: (state, self) => {
+            const unit = getCurrentUnit(state, self.host);
+
+            return unit === undefined
+                ? state
+                : updateUnit(state, {
+                      ...unit,
+                      offense: removeAttackContribution(unit.offense, `effect/${self.id}/attack`),
+                  });
+        },
     };
 }
 

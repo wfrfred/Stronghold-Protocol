@@ -1,3 +1,4 @@
+import { get as unitQueryGet } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialize } from "../helpers/unit.js";
@@ -18,18 +19,18 @@ test("sequential lifecycle callbacks observe each capability change immediately"
     let battle = effectFixtureWork(host(1), host(2));
     const notices = [];
     const content = maxHpBuff("hp", 100, {
-        onDisable(state, ctx) {
-            const unit = getUnit(state, ctx.ref.host.id);
+        onDisable(state, self) {
+            const unit = getUnit(state, self.host.id);
             notices.push([
                 "disable",
-                ctx.ref.host.id,
+                self.host.id,
                 unit.vitality.hp,
                 resolveMaxHp(unit.vitality, unit.definition.vitality),
             ]);
             return state;
         },
-        onEnd(state, ctx) {
-            notices.push(["end", ctx.ref.host.id, ctx.unit.vitality.hp]);
+        onEnd(state, self) {
+            notices.push(["end", self.host.id, unitQueryGet(state, self.host).vitality.hp]);
             return state;
         },
     });

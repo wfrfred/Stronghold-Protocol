@@ -30,22 +30,31 @@ export function compileArknightsAttackBuffSkill(value: unknown, level: number): 
     const buff: Definition<{ readonly attackIncrease: number }, Offense> = {
         id: `skill/${parsed.definition.id}/${level}/attack`,
         initialize: () => ({ attackIncrease }),
-        onEnable: (state, context) => {
+        onEnable: (state, self) => {
+            const unit = getUnit(state, self.host);
+
+            if (unit === undefined) {
+                return state;
+            }
+
             return updateUnit(state, {
-                ...context.unit,
-                offense: setAttackContribution(context.unit.offense, {
-                    id: `@effect/${context.self.id}/attack`,
-                    value: [attribute.create({ multiplier: context.self.data.attackIncrease })],
+                ...unit,
+                offense: setAttackContribution(unit.offense, {
+                    id: `@effect/${self.id}/attack`,
+                    value: [attribute.create({ multiplier: self.data.attackIncrease })],
                 }),
             });
         },
-        onDisable: (state, context) => {
+        onDisable: (state, self) => {
+            const unit = getUnit(state, self.host);
+
+            if (unit === undefined) {
+                return state;
+            }
+
             return updateUnit(state, {
-                ...context.unit,
-                offense: removeAttackContribution(
-                    context.unit.offense,
-                    `@effect/${context.self.id}/attack`,
-                ),
+                ...unit,
+                offense: removeAttackContribution(unit.offense, `@effect/${self.id}/attack`),
             });
         },
     };

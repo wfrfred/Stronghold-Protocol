@@ -30,9 +30,10 @@ test("Effect installation resolves its typed host against the latest battle", ()
     const installed = effects.install(current, host, {
         id: "read-current-host",
         initialize: () => ({}),
-        onInstall(battle, context) {
-            observed = context.unit.vitality.hp;
-            assert.equal(context.unit, units.get(battle, host));
+        onInstall(battle, self) {
+            const current = units.get(battle, self.host);
+            observed = current.vitality.hp;
+            assert.equal(current, units.get(battle, host));
             return battle;
         },
     });
@@ -82,7 +83,7 @@ test("Effect typed hosts retain capability requirements and private data inferen
 import type { State as BattleState } from ${source("battle/state")};
 import type { Unit } from ${source("unit/unit")};
 import type { Ref } from ${source("../common/ref")};
-import { ref } from ${source("unit/query")};
+import { ref, get } from ${source("unit/query")};
 import type { Locomotion } from ${source("unit/capability/locomotion/capability")};
 import type { Vitality } from ${source("unit/capability/vitality/capability")};
 import type { Definition } from ${source("unit/effect/definition")};
@@ -97,13 +98,36 @@ declare const known: Unit & Vitality;
 const vitality: Definition<{ charges: number }, Vitality> = {
     id: "vitality",
     initialize: () => ({ charges: 1 }),
-    onInstall(state, context) {
-        const hp: number = context.unit.vitality.hp;
-        const maxHp: number = context.unit.definition.vitality.maxHp;
-        const charges: number = context.self.data.charges;
+    onInstall(state, self) {
+        const current: (Unit & Vitality) | undefined = get(state, self.host);
+        const hp: number | undefined = current?.vitality.hp;
+        const maxHp: number | undefined = current?.definition.vitality.maxHp;
+        const charges: number = self.data.charges;
+        return update(state, effectRef(self), data => ({ charges: data.charges + 1 }));
+    },
+    onEnd(state, self, reason) {
+        const typed: Effect<{ charges: number }, Vitality> = self;
+        const why: string = reason;
+        const current: (Unit & Vitality) | undefined = get(state, self.host);
         return state;
     },
 };
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+type Assert<T extends true> = T;
+type InstallCallback = Assert<Equal<Parameters<NonNullable<Definition<{ charges: number }, Vitality>["onInstall"]>>, [BattleState, Effect<{ charges: number }, Vitality>]>>;
+type EnableCallback = Assert<Equal<Parameters<NonNullable<Definition<{ charges: number }, Vitality>["onEnable"]>>, [BattleState, Effect<{ charges: number }, Vitality>]>>;
+type DisableCallback = Assert<Equal<Parameters<NonNullable<Definition<{ charges: number }, Vitality>["onDisable"]>>, [BattleState, Effect<{ charges: number }, Vitality>]>>;
+type TickCallback = Assert<Equal<Parameters<NonNullable<Definition<{ charges: number }, Vitality>["onTick"]>>, [BattleState, Effect<{ charges: number }, Vitality>]>>;
+type TerminalCallback = Assert<Equal<Parameters<NonNullable<Definition<{ charges: number }, Vitality>["onEnd"]>>, [BattleState, Effect<{ charges: number }, Vitality>, string]>>;
+const legacy = (_state: BattleState, context: {
+    self: Effect<{ charges: number }, Vitality>;
+    unit: Unit & Vitality;
+    ref: Ref<Effect<{ charges: number }, Vitality>>;
+}) => _state;
+// @ts-expect-error lifecycle callbacks receive the precise Effect rather than a wrapper.
+const invalidWrappedCallback: Definition<{ charges: number }, Vitality> = { ...vitality, onInstall: legacy };
+// @ts-expect-error onEnd receives the reason separately rather than inside a wrapper.
+const invalidWrappedEnd: Definition<{ charges: number }, Vitality> = { ...vitality, onEnd: legacy };
 const combined: Definition<object, Locomotion & Vitality> = {
     id: "combined", initialize: () => ({}),
 };

@@ -24,8 +24,8 @@ test("effect groups: replacing the selected rule withdraws old output and restor
     const trace = [];
     const weak = attackBuff("weak", 20, {
         group: group(1),
-        onEnable: (state, context) => {
-            trace.push(["weak+", context.self.data.amount]);
+        onEnable: (state, self) => {
+            trace.push(["weak+", self.data.amount]);
             return state;
         },
         onDisable: (state) => {
@@ -111,8 +111,8 @@ test("effect groups: a stronger rule installed during withdrawal supersedes the 
     const replacement = attackBuff("replacement", 300, { group: group(3) });
     const weak = attackBuff("weak", 10, {
         group: group(1),
-        onDisable(state, context) {
-            const installed = effect.install(state, unitRef(context.unit), replacement, {});
+        onDisable(state, self) {
+            const installed = effect.install(state, self.host, replacement, {});
             replacementRef = installed.value;
             return installed.state;
         },

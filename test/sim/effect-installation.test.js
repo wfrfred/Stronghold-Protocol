@@ -1,3 +1,4 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
@@ -30,22 +31,22 @@ test("effect installation: a nested weaker rule does not enable its parent befor
     let childRef;
     const parent = attackBuff("parent", 0, {
         group: group(2),
-        onInstall(state, context) {
-            assert.equal(context.self.status, "INSTALLING");
+        onInstall(state, self) {
+            assert.equal(self.status, "INSTALLING");
             trace.push("install begin");
             ({ state, value: childRef } = effect.install(
                 state,
-                unitRef(context.unit),
+                self.host,
                 child,
                 {},
             ));
-            assert.equal(get(state, context.ref).status, "INSTALLING");
-            state = effect.update(state, context.ref, data => ({ amount: 100 }));
+            assert.equal(get(state, effectRef(self)).status, "INSTALLING");
+            state = effect.update(state, effectRef(self), data => ({ amount: 100 }));
             trace.push("install end");
             return state;
         },
-        onEnable(state, context) {
-            trace.push(["enable", context.self.data.amount]);
+        onEnable(state, self) {
+            trace.push(["enable", self.data.amount]);
             return state;
         },
     });
@@ -65,18 +66,18 @@ for (const grouped of [false, true]) {
         let battle = effectFixtureWork(host());
         const parent = attackBuff("parent", 0, {
             ...(grouped ? { group: group(2) } : {}),
-            onInstall(state, context) {
-                assert.equal(context.self.status, "INSTALLING");
+            onInstall(state, self) {
+                assert.equal(self.status, "INSTALLING");
                 trace.push("install begin");
-                state = effect.setEnabled(state, context.ref, false);
-                state = effect.setEnabled(state, context.ref, true);
-                state = effect.update(state, context.ref, data => ({ amount: 100 }));
-                assert.equal(get(state, context.ref).status, "INSTALLING");
+                state = effect.setEnabled(state, effectRef(self), false);
+                state = effect.setEnabled(state, effectRef(self), true);
+                state = effect.update(state, effectRef(self), data => ({ amount: 100 }));
+                assert.equal(get(state, effectRef(self)).status, "INSTALLING");
                 trace.push("install end");
                 return state;
             },
-            onEnable(state, context) {
-                trace.push(["enable", context.self.data.amount]);
+            onEnable(state, self) {
+                trace.push(["enable", self.data.amount]);
                 return state;
             },
         });
@@ -98,17 +99,17 @@ test("effect installation: an independent child enables while its parent finishe
         },
     });
     const parent = attackBuff("parent", 0, {
-        onInstall(state, context) {
-            assert.equal(context.self.status, "INSTALLING");
+        onInstall(state, self) {
+            assert.equal(self.status, "INSTALLING");
             trace.push("install begin");
-            state = effect.install(state, unitRef(context.unit), child, {}).state;
-            assert.equal(get(state, context.ref).status, "INSTALLING");
-            state = effect.update(state, context.ref, data => ({ amount: 100 }));
+            state = effect.install(state, self.host, child, {}).state;
+            assert.equal(get(state, effectRef(self)).status, "INSTALLING");
+            state = effect.update(state, effectRef(self), data => ({ amount: 100 }));
             trace.push("install end");
             return state;
         },
-        onEnable(state, context) {
-            trace.push(["enable", context.self.data.amount]);
+        onEnable(state, self) {
+            trace.push(["enable", self.data.amount]);
             return state;
         },
     });
@@ -123,11 +124,11 @@ test("effect installation: ending during installation never publishes the effect
     const trace = [];
     let battle = effectFixtureWork(host());
     const content = attackBuff("self-ending", 100, {
-        onInstall(state, context) {
-            assert.equal(context.self.status, "INSTALLING");
+        onInstall(state, self) {
+            assert.equal(self.status, "INSTALLING");
             trace.push("install");
-            state = effect.end(state, context.ref, "NOT_APPLICABLE");
-            assert.equal(get(state, context.ref), undefined);
+            state = effect.end(state, effectRef(self), "NOT_APPLICABLE");
+            assert.equal(get(state, effectRef(self)), undefined);
             return state;
         },
         onEnable: (state) => {
@@ -138,8 +139,8 @@ test("effect installation: ending during installation never publishes the effect
             trace.push("disable");
             return state;
         },
-        onEnd(state, context) {
-            assert.equal(context.self.status, "ENDING");
+        onEnd(state, self) {
+            assert.equal(self.status, "ENDING");
             trace.push("end");
             return state;
         },
@@ -160,15 +161,15 @@ test("effect installation: closing the host from a nested installation never ena
         "host-closing-child",
         {},
         {
-            onInstall(state, context) {
-                return closeLifetime(state, { type: "UNIT", ref: unitRef(context.unit) }, "RETREAT");
+            onInstall(state, self) {
+                return closeLifetime(state, { type: "UNIT", ref: self.host }, "RETREAT");
             },
         },
     );
     const parent = attackBuff("parent", 100, {
-        onInstall(state, context) {
-            state = effect.install(state, unitRef(context.unit), child, {}).state;
-            assert.equal(get(state, context.ref), undefined);
+        onInstall(state, self) {
+            state = effect.install(state, self.host, child, {}).state;
+            assert.equal(get(state, effectRef(self)), undefined);
             return state;
         },
         onEnable: (state) => {

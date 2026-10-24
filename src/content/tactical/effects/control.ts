@@ -1,12 +1,15 @@
 import type { Definition } from "../../../core/tactical/unit/effect/definition.js";
 import { updateUnit } from "../../../core/tactical/battle/state.js";
 import * as skill from "../../../core/tactical/unit/capability/skill/capability.js";
+import * as units from "../../../core/tactical/unit/query.js";
 
 export const silence: Definition<object> = {
     id: "control/silence",
     initialize: () => ({}),
-    onEnable(state, { unit, self }) {
-        return skill.hasSkill(unit)
+    onEnable(state, self) {
+        const unit = units.get(state, self.host);
+
+        return unit !== undefined && skill.hasSkill(unit)
             ? updateUnit(state, {
                   ...unit,
                   skill: skill.setRule(unit.skill, {
@@ -16,8 +19,10 @@ export const silence: Definition<object> = {
               })
             : state;
     },
-    onDisable(state, { unit, self }) {
-        return skill.hasSkill(unit)
+    onDisable(state, self) {
+        const unit = units.get(state, self.host);
+
+        return unit !== undefined && skill.hasSkill(unit)
             ? updateUnit(state, {
                   ...unit,
                   skill: skill.removeRule(unit.skill, `@effect/${self.id}/silence`),
@@ -29,8 +34,10 @@ export const silence: Definition<object> = {
 export const blockSpRecovery: Definition<object> = {
     id: "control/block-sp-recovery",
     initialize: () => ({}),
-    onEnable(state, { unit, self }) {
-        return skill.hasSkill(unit)
+    onEnable(state, self) {
+        const unit = units.get(state, self.host);
+
+        return unit !== undefined && skill.hasSkill(unit)
             ? updateUnit(state, {
                   ...unit,
                   skill: skill.setRule(unit.skill, {
@@ -40,8 +47,10 @@ export const blockSpRecovery: Definition<object> = {
               })
             : state;
     },
-    onDisable(state, { unit, self }) {
-        return skill.hasSkill(unit)
+    onDisable(state, self) {
+        const unit = units.get(state, self.host);
+
+        return unit !== undefined && skill.hasSkill(unit)
             ? updateUnit(state, {
                   ...unit,
                   skill: skill.removeRule(unit.skill, `@effect/${self.id}/sp-recovery`),

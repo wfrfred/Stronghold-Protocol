@@ -237,9 +237,9 @@ test("action runtime: dependency cleanup can finish nested host death before a t
     const dependency = {
         id: "terminal-dependency",
         initialize: () => ({}),
-        onEnd(state, context) {
-            state = dealDamage(state, { source: { id: 0 }, target: { id: context.unit.id }, parameters: parameters(100, "TRUE") }).state;
-            observedDeparture = getUnit(state, context.unit.id) === undefined;
+        onEnd(state, self) {
+            state = dealDamage(state, { source: { id: 0 }, target: { id: self.host.id }, parameters: parameters(100, "TRUE") }).state;
+            observedDeparture = getUnit(state, self.host.id) === undefined;
             throw failure;
         },
     };

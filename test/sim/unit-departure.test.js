@@ -1,3 +1,4 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
@@ -49,8 +50,8 @@ function fixture() {
         "consume-on-damage",
         { consumed: 0 },
         {
-            onInstall(state, ctx) {
-                const ref = ctx.ref;
+            onInstall(state, self) {
+                const ref = effectRef(self);
                 return transitionUnit(state, ref.host.id, (unit) =>
                     ({ ...unit, vitality: setHook(unit.vitality, {
                         id: "consume",
@@ -65,8 +66,8 @@ function fixture() {
                     }) }),
                 );
             },
-            onEnd(state, ctx) {
-                return transitionUnit(state, ctx.ref.host.id, (unit) => ({ ...unit, vitality: removeHook(unit.vitality, "consume") }));
+            onEnd(state, self) {
+                return transitionUnit(state, self.host.id, (unit) => ({ ...unit, vitality: removeHook(unit.vitality, "consume") }));
             },
         },
     );
@@ -248,8 +249,8 @@ test("effect terminal callback can retire its host and settle remote Action and 
         "action-dependent",
         {},
         {
-            onEnd: (state, context) => {
-                assert.equal(context.reason, "DEATH");
+            onEnd: (state, self, reason) => {
+                assert.equal(reason, "DEATH");
                 trace.push("action-effect");
                 return state;
             },
@@ -275,7 +276,7 @@ test("effect terminal callback can retire its host and settle remote Action and 
         "nested-death",
         {},
         {
-            onEnd(state, ctx) {
+            onEnd(state) {
                 trace.push("effect");
                 state = dealDamage({ ...state, tick: 1 }, { source: null, target: { id: 0 }, parameters: parameters(100, "TRUE") }).state;
                 trace.push("after-damage");

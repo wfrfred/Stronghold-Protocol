@@ -1,3 +1,4 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { initialize } from "./unit.js";
 import { transitionUnit, getUnit, battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
@@ -61,7 +62,7 @@ export function setSelf(state, context, self, next) {
     const current = unit && unit.effects.get(self.id, self.definition);
     return current === undefined
         ? state
-        : effects.update(state, { host: current.host, id: current.id },
+        : effects.update(state, effectRef(current),
               typeof next === "function" ? next : () => next);
 }
 
@@ -74,29 +75,29 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
     let content;
     content = definition(id, initial, {
         ...callbacks,
-        onInstall(state, context) {
-            state = transitionUnit(state, context.ref.host.id, (unit) =>
+        onInstall(state, self) {
+            state = transitionUnit(state, self.host.id, (unit) =>
                 entries.reduce(
                     (unit, entry, index) => ({
                         ...unit,
                         vitality: domain.setHook(unit.vitality, {
-                            id: `${context.ref.host.id}:${context.ref.id}:${index}`,
+                            id: `${self.host.id}:${self.id}:${index}`,
                             stage: entry.stage,
                             priority: entry.priority ?? 0,
                             accepts(state, contextValue, input) {
-                                const invocation = { ...contextValue, host: context.ref.host };
-                                const self = getUnit(state, invocation.host.id)?.effects.get(context.ref.id, content);
+                                const invocation = { ...contextValue, host: self.host };
+                                const current = effects.get(state, effectRef(self));
                                 return (
-                                    self?.status === "ACTIVE" &&
-                                    (entry.accepts?.(state, invocation, self, input) ?? true)
+                                    current?.status === "ACTIVE" &&
+                                    (entry.accepts?.(state, invocation, current, input) ?? true)
                                 );
                             },
                             invoke(state, contextValue, input) {
-                                const invocation = { ...contextValue, host: context.ref.host };
+                                const invocation = { ...contextValue, host: self.host };
                                 return entry.invoke(
                                     state,
                                     invocation,
-                                    getUnit(state, invocation.host.id).effects.get(context.ref.id, content),
+                                    effects.get(state, effectRef(self)),
                                     input,
                                 );
                             },
@@ -105,22 +106,22 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
                     unit,
                 ),
             );
-            return callbacks.onInstall ? callbacks.onInstall(state, context) : state;
+            return callbacks.onInstall ? callbacks.onInstall(state, self) : state;
         },
-        onEnd(state, context) {
-            state = transitionUnit(state, context.ref.host.id, (unit) =>
+        onEnd(state, self, reason) {
+            state = transitionUnit(state, self.host.id, (unit) =>
                 entries.reduce(
                     (unit, _entry, index) => ({
                         ...unit,
                         vitality: domain.removeHook(
                             unit.vitality,
-                            `${context.ref.host.id}:${context.ref.id}:${index}`,
+                            `${self.host.id}:${self.id}:${index}`,
                         ),
                     }),
                     unit,
                 ),
             );
-            return callbacks.onEnd ? callbacks.onEnd(state, context) : state;
+            return callbacks.onEnd ? callbacks.onEnd(state, self, reason) : state;
         },
     });
     return content;

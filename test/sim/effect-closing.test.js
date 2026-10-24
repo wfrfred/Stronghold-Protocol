@@ -1,3 +1,5 @@
+import { get as unitQueryGet } from "../../dist/core/tactical/unit/query.js";
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
@@ -35,8 +37,8 @@ test("effect lifetimes: parent ending cascades across Units and shared descendan
         "dependent",
         {},
         {
-            onEnd: (state, context) => {
-                trace.push(context.self.data.name);
+            onEnd: (state, self) => {
+                trace.push(self.data.name);
                 return state;
             },
         },
@@ -103,8 +105,8 @@ test("effect lifetimes: a closing host rejects a new dependent before its instal
         "parent",
         {},
         {
-            onEnd(state, context) {
-                const result = effect.install(state, unitRef(context.unit), child, {});
+            onEnd(state, self) {
+                const result = effect.install(state, self.host, child, {});
                 installed = result.value;
                 return result.state;
             },
@@ -124,13 +126,13 @@ test("effect lifetimes: a closed parent cannot admit a remote dependent during t
         "parent",
         {},
         {
-            onEnd(state, context) {
+            onEnd(state, self) {
                 const result = effect.install(
                     state,
                     unitRef(getUnit(state, 1)),
                     child,
                     {
-                        scopes: [{ type: "EFFECT", ref: context.ref }],
+                        scopes: [{ type: "EFFECT", ref: effectRef(self) }],
                     },
                 );
                 accepted = result.value;
@@ -152,8 +154,8 @@ test("effect lifetimes: each subsequent terminal callback sees preceding state c
         "last",
         {},
         {
-            onEnd(state, context) {
-                assert.equal(context.unit.vitality.hp, 30);
+            onEnd(state, self) {
+                assert.equal(unitQueryGet(state, self.host).vitality.hp, 30);
                 return state;
             },
         },
@@ -162,7 +164,7 @@ test("effect lifetimes: each subsequent terminal callback sees preceding state c
         "first",
         {},
         {
-            onEnd(state, context) {
+            onEnd(state) {
                 const receiver = getUnit(state, 1);
                 state = updateUnit(state, {
                     ...receiver,
@@ -183,10 +185,10 @@ test("effect lifetimes: each subsequent terminal callback sees preceding state c
 test("effect lifetimes: ending the same instance in its disable callback remains terminal and idempotent", () => {
     const calls = [];
     const value = attackBuff("terminal", 20, {
-        onDisable(state, context) {
+        onDisable(state, self) {
             calls.push("disable");
-            state = effect.setEnabled(state, context.ref, true);
-            return effect.end(state, context.ref, "NESTED");
+            state = effect.setEnabled(state, effectRef(self), true);
+            return effect.end(state, effectRef(self), "NESTED");
         },
         onEnd: (state) => {
             calls.push("end");
@@ -243,10 +245,10 @@ test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a
         "parent-hook",
         {},
         {
-            onInstall(state, context) {
+            onInstall(state, self) {
                 return updateUnit(
                     state,
-                    ({ ...context.unit, vitality: setHook(context.unit.vitality, {
+                    ({ ...unitQueryGet(state, self.host), vitality: setHook(unitQueryGet(state, self.host).vitality, {
                         id: "parent-hook",
                         stage: "completed",
                         priority: 0,
@@ -257,8 +259,8 @@ test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a
                     }) }),
                 );
             },
-            onEnd(state, context) {
-                const host = getUnit(state, context.ref.host.id);
+            onEnd(state, self) {
+                const host = getUnit(state, self.host.id);
                 return host === undefined
                     ? state
                     : updateUnit(state, ({ ...host, vitality: removeHook(host.vitality, "parent-hook") }));
@@ -269,7 +271,7 @@ test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a
         "child-death",
         {},
         {
-            onEnd(state, context) {
+            onEnd(state) {
                 return dealDamage(state, { source: null, target: { id: 0 }, parameters: parameters(100, "TRUE") }).state;
             },
         },

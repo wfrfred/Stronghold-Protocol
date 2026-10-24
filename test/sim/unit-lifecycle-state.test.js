@@ -73,8 +73,8 @@ for (const reason of ["DEATH", "RETREAT", "SCRIPT"]) {
     ]) {
       state = effects.install(state, unitRef(getUnit(state, host)), {
         id, initialize: () => ({}),
-        onEnd(state, context) {
-          effectEnds.push([id, context.reason]);
+        onEnd(state, self, reason) {
+          effectEnds.push([id, reason]);
           return state;
         },
       }, { scopes }).state;
@@ -180,7 +180,7 @@ test("departure callbacks cannot start a new skill activation", () => {
   const original = createBattleState(fixtureBattlefield([unit(0, { skill })]));
   const installed = effects.install(original, unitRef(getUnit(original, 0)), {
     id: "activation-on-departure", initialize: () => ({}),
-    onEnd(state, context) {
+    onEnd(state) {
       attempted = activate(state, unitRef(getUnit(state, 0)));
       assert.equal(attempted.state, state);
       assert.equal(getUnit(attempted.state, 0).skill.active, null);

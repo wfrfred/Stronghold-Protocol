@@ -60,9 +60,9 @@ test("MaxHP outputs coordinate each setter before its lifecycle callback", () =>
     const observed = [];
     let battle = effectFixtureWork(receiver());
     const content = maxHpBuff("hp", 100, {
-        onEnable: (state, ctx) => { observed.push(["enabled", getUnit(state, ctx.ref.host.id).vitality.hp]); return state; },
-        onDisable: (state, ctx) => { observed.push(["disabled", getUnit(state, ctx.ref.host.id).vitality.hp]); return state; },
-        onEnd: (state, ctx) => { observed.push(["ended", getUnit(state, ctx.ref.host.id).vitality.hp]); return state; },
+        onEnable: (state, self) => { observed.push(["enabled", getUnit(state, self.host.id).vitality.hp]); return state; },
+        onDisable: (state, self) => { observed.push(["disabled", getUnit(state, self.host.id).vitality.hp]); return state; },
+        onEnd: (state, self) => { observed.push(["ended", getUnit(state, self.host.id).vitality.hp]); return state; },
     });
     const before = battlefieldView(battle);
     const installed = install(battle, content);
@@ -106,7 +106,7 @@ test("MaxHP tick deadline and callback successor use the latest HP ratio", () =>
     let battle = effectFixtureWork(receiver());
     const successor = maxHpBuff("successor", 50);
     const content = maxHpBuff("expiring", 100, {
-        onEnd: (state, ctx) => effects.install(state, unitRef(getUnit(state, ctx.unit.id)), successor, {}).state,
+        onEnd: (state, self) => effects.install(state, unitRef(getUnit(state, self.host.id)), successor, {}).state,
     });
     battle = install(battle, content, 1, { scopes: [{ type: "TICK", tick: 1 }] }).state;
     battle = transitionUnit(battle, 1, (unit) => ({ ...unit, vitality: { ...unit.vitality, hp: 40 } }));

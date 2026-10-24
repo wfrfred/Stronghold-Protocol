@@ -1,9 +1,10 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { select } from "../../dist/core/tactical/battle/targeting/select.js";
 import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { selectStates as selectCapabilityStates } from "../../dist/core/tactical/unit/snapshot.js";
 import { initialize as initializeUnit, placement } from "./unit.js";
-import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
+import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { definition, attackBuff, effectFixtureWork } from "./effects.js";
 
@@ -34,15 +35,12 @@ export function auraEffect(
         group,
     } = {},
 ) {
-    const selfOf = (state, context) =>
-        getUnit(state, context.ref.host.id)?.effects.values().toArray().find(
-            (effect) => effect.id === context.ref.id,
-        );
-    const save = (state, context, transform) => effects.update(state, context.ref, transform);
-    const refresh = (state, context) => {
-        let self = selfOf(state, context);
+    const selfOf = (state, self) => effects.get(state, effectRef(self));
+    const save = (state, self, transform) => effects.update(state, effectRef(self), transform);
+    const refresh = (state, initial) => {
+        let self = selfOf(state, initial);
         if (self?.status !== "ACTIVE") return state;
-        const host = getUnit(state, context.ref.host.id);
+        const host = getUnit(state, self.host.id);
         const selectedResult = select(state, {
             source: unitRef(host),
             purposes: ["EFFECT"],
@@ -54,7 +52,7 @@ export function auraEffect(
         const selected = selectedResult.value.map(target => target.id);
         for (const binding of self.data.bindings) {
             if (selected.includes(binding.unitId)) continue;
-            state = save(state, context, (current) => ({
+            state = save(state, initial, (current) => ({
                 ...current,
                 bindings: current.bindings.filter((item) => item !== binding),
             }));
@@ -62,36 +60,31 @@ export function auraEffect(
                 state = effects.end(state, ref, "AURA_LEFT");
         }
         for (const unitId of selected) {
-            self = selfOf(state, context);
+            self = selfOf(state, initial);
             if (self?.status !== "ACTIVE") break;
             if (self.data.bindings.some((binding) => binding.unitId === unitId)) continue;
-            state = save(state, context, (current) => ({
+            state = save(state, self, (current) => ({
                 ...current,
                 bindings: [...current.bindings, { unitId, refs: [] }],
             }));
-            const value = initialState(
-                {
-                    ...context,
-                    unit: getUnit(state, context.ref.host.id),
-                    self: selfOf(state, context),
-                },
-                unitId,
-            );
+            self = selfOf(state, initial);
+            if (self?.status !== "ACTIVE") break;
+            const value = initialState(state, self, unitId);
             const installed = effects.install(
                 state,
                 unitRef(getUnit(state, unitId)),
                 receiver,
                 {
-                    source: context.ref.host.id,
-                    scopes: bindLifetime ? [{ type: "EFFECT", ref: context.ref }] : [],
+                    source: self.host.id,
+                    scopes: bindLifetime ? [{ type: "EFFECT", ref: effectRef(self) }] : [],
                     ...(value === undefined ? {} : { data: value }),
                 },
             );
             state = installed.state;
             const ref = installed.value;
-            self = selfOf(state, context);
+            self = selfOf(state, initial);
             if (ref === undefined || self === undefined || self.status === "ENDING") continue;
-            state = save(state, context, (current) => ({
+            state = save(state, self, (current) => ({
                 ...current,
                 bindings: current.bindings.map((binding) =>
                     binding.unitId === unitId ? { ...binding, refs: [ref] } : binding,
@@ -107,27 +100,27 @@ export function auraEffect(
         { bindings: [], nextRefreshTick: 0 },
         {
             ...(group === undefined ? {} : { group }),
-            onTick(state, context) {
-                if (context.tick < context.self.data.nextRefreshTick) return state;
-                state = save(state, context, (current) => ({
+            onTick(state, self) {
+                if (state.tick < self.data.nextRefreshTick) return state;
+                state = save(state, self, (current) => ({
                     ...current,
-                    nextRefreshTick: context.tick + refreshInterval,
+                    nextRefreshTick: state.tick + refreshInterval,
                 }));
-                return refresh(state, context);
+                return refresh(state, self);
             },
-            onEnable(state, context) {
-                state = refresh(state, context);
-                const self = selfOf(state, context);
-                if (self?.status !== "ACTIVE") return state;
-                for (const binding of self.data.bindings) {
+            onEnable(state, self) {
+                state = refresh(state, self);
+                const current = selfOf(state, self);
+                if (current?.status !== "ACTIVE") return state;
+                for (const binding of current.data.bindings) {
                     for (const ref of binding.refs)
                         state = effects.setEnabled(state, ref, true);
                 }
                 return state;
             },
-            onDisable(state, context) {
-                if (context.self.status === "ENDING") return state;
-                for (const binding of context.self.data.bindings) {
+            onDisable(state, self) {
+                if (self.status === "ENDING") return state;
+                for (const binding of self.data.bindings) {
                     for (const ref of binding.refs)
                         state = effects.setEnabled(state, ref, false);
                 }

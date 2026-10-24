@@ -32,25 +32,26 @@ import type { Locomotion, Input as MovementInput } from ${module("unit/capabilit
 import { setSpeedContribution as setActionSpeedContribution, type Action, type Input as ActionInput } from ${module("unit/capability/action/capability")};
 import { setSpeedContribution } from ${module("unit/capability/locomotion/operations")};
 import type { Route, Progress } from ${module("unit/capability/route/capability")};
-import type { Context, Definition } from ${module("unit/effect/definition")};
+import type { Definition } from ${module("unit/effect/definition")};
 import { install, update, get } from ${module("unit/effect/operations")};
-import type { Effect } from ${module("unit/effect/effect")};
+import { ref as effectRef, type Effect } from ${module("unit/effect/effect")};
 import { Effects } from ${module("unit/effect/effects")};
 import type { Contribution } from ${module("unit/contribution/contribution")};
 import type { Modifier } from ${module("unit/contribution/attribute")};
-import { ref as unitRef } from ${module("unit/query")};
+import { ref as unitRef, get as getUnit } from ${module("unit/query")};
 const host=initialize(battle, {id:1,position:[0,0],definition:{id:'host',vitality: { maxHp: 100, defense: 0, resistance: 0 }}}).value;
 const content: Definition<{charges:number},Vitality> = {
  id:'shield',initialize:()=>({charges:2}),
- onTick(state,context) {
-   const hp:number=context.unit.vitality.hp;
+ onTick(state,self) {
+   const unit=getUnit(state,self.host)!;
+   const hp:number=unit.vitality.hp;
    // @ts-expect-error private state remains specific to this definition.
-   update(state,context.ref,()=>({missing:1}));
+   update(state,effectRef(self),()=>({missing:1}));
    // @ts-expect-error stored values are readonly.
-   context.self.status='ENDING';
+   self.status='ENDING';
    // @ts-expect-error shared host state must use immutable transitions.
-   context.unit.vitality.hp=hp;
-   return update(state,context.ref,current=>({charges:current.charges-1}));
+   unit.vitality.hp=hp;
+   return update(state,effectRef(self),current=>({charges:current.charges-1}));
  }
 };
 declare const battle:BattleState;
@@ -72,14 +73,13 @@ if(ref!==undefined) {
 declare const shield:Effect<{charges:number},Vitality>;
 declare const poison:Effect<{damage:number}>;
 const mixed=Effects.empty().add(shield).add(poison);
-declare function contextOf<S extends object,H extends object>(self:Effect<S,H>):Context<S,H>;
 const readState:BattleState|undefined=mixed.read(shield.id,effect=>
- effect.definition.onTick?.(battle,contextOf(effect))??battle,
+ effect.definition.onTick?.(battle,effect)??battle,
 );
-// @ts-expect-error a polymorphic reader cannot expose a falsely universal Effect.
-const leakedEffect:Effect|undefined=mixed.read(shield.id,effect=>effect);
-// @ts-expect-error a polymorphic reader cannot expose a falsely universal Definition.
-const leakedDefinition:Definition<object,object>|undefined=mixed.read(shield.id,effect=>effect.definition);
+// @ts-expect-error a polymorphic reader cannot invent concrete private data and host requirements.
+const leakedEffect:Effect<{charges:number},Vitality>|undefined=mixed.read(shield.id,effect=>effect);
+// @ts-expect-error a polymorphic reader cannot invent a concrete Definition association.
+const leakedDefinition:Definition<{charges:number},Vitality>|undefined=mixed.read(shield.id,effect=>effect.definition);
 const restored=mixed.get(shield.id,content);
 if(restored!==undefined){
  const charges:number=restored.data.charges;
@@ -201,12 +201,13 @@ const movement={
 const mainRoute:Progress=movement.route.main;
 const crossCapability:Definition<{bonus:number},Vitality & Offense>={
  id:'low-hp-attack',initialize:()=>({bonus:10}),
- onEnable(state,context){
-  const hp:number=context.unit.vitality.hp;
-  const maxHp:number=context.unit.definition.vitality.maxHp;
-  const attack:number=context.unit.definition.offense.attack;
-  const offense=setAttackContribution(context.unit.offense,fixed);
-  const host:Unit & Vitality & Offense={...context.unit,offense};
+ onEnable(state,self){
+  const unit=getUnit(state,self.host)!;
+  const hp:number=unit.vitality.hp;
+  const maxHp:number=unit.definition.vitality.maxHp;
+  const attack:number=unit.definition.offense.attack;
+  const offense=setAttackContribution(unit.offense,fixed);
+  const host:Unit & Vitality & Offense={...unit,offense};
   return state;
  },
 };

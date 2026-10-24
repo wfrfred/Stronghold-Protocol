@@ -25,15 +25,15 @@ function parameterEffect(id, modifiers) {
     return {
         id,
         initialize: () => ({}),
-        onEnable: (battle, context) => change(battle, (skill) => ({
+        onEnable: (battle, self) => change(battle, (skill) => ({
             ...skill,
             sp: Object.entries(modifiers).reduce((state, [key, value]) =>
-                sp.setContribution(state, key, { id: `${context.self.id}/${key}`, value }), skill.sp),
+                sp.setContribution(state, key, { id: `${self.id}/${key}`, value }), skill.sp),
         })),
-        onDisable: (battle, context) => change(battle, (skill) => ({
+        onDisable: (battle, self) => change(battle, (skill) => ({
             ...skill,
             sp: Object.keys(modifiers).reduce((state, key) =>
-                sp.removeContribution(state, key, `${context.self.id}/${key}`), skill.sp),
+                sp.removeContribution(state, key, `${self.id}/${key}`), skill.sp),
         })),
     };
 }

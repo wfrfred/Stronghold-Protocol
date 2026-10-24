@@ -1,3 +1,4 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "./battlefield.js";
 import {
@@ -94,20 +95,20 @@ function contributionBuff(id, amount, set, remove, callbacks) {
         { amount },
         {
             ...callbacks,
-            onEnable(state, context) {
-                state = transitionUnit(state, context.ref.host.id, (unit) =>
+            onEnable(state, self) {
+                state = transitionUnit(state, self.host.id, (unit) =>
                     set(unit, {
-                        id: `${context.ref.host.id}:${context.ref.id}`,
-                        value: [modifier({ finalAddition: context.self.data.amount })],
+                        id: `${self.host.id}:${self.id}`,
+                        value: [modifier({ finalAddition: self.data.amount })],
                     }),
                 );
-                return callbacks.onEnable ? callbacks.onEnable(state, context) : state;
+                return callbacks.onEnable ? callbacks.onEnable(state, self) : state;
             },
-            onDisable(state, context) {
-                state = transitionUnit(state, context.ref.host.id, (unit) =>
-                    remove(unit, `${context.ref.host.id}:${context.ref.id}`),
+            onDisable(state, self) {
+                state = transitionUnit(state, self.host.id, (unit) =>
+                    remove(unit, `${self.host.id}:${self.id}`),
                 );
-                return callbacks.onDisable ? callbacks.onDisable(state, context) : state;
+                return callbacks.onDisable ? callbacks.onDisable(state, self) : state;
             },
         },
     );
@@ -133,34 +134,34 @@ export function contributionEffect(
 ) {
     let content;
     const key = (ref) => `${ref.host.id}:${ref.id}`;
-    const publish = (state, context) =>
-        transitionUnit(state, context.ref.host.id, (unit) => ({
+    const publish = (state, self) =>
+        transitionUnit(state, self.host.id, (unit) => ({
             ...unit,
             [capability]: set(unit[capability], {
-                id: key(context.ref),
+                id: key(effectRef(self)),
                 ...(group === undefined
                     ? {}
-                    : { group: typeof group === "function" ? group(context.self) : group }),
+                    : { group: typeof group === "function" ? group(self) : group }),
                 value: dynamic
                     ? (battle, host) => {
-                          const current = get(battle, context.ref);
+                          const current = get(battle, effectRef(self));
                           return current === undefined ? [] : value(current, battle, host);
                       }
-                    : value(context.self, state, unit),
+                    : value(self, state, unit),
             }),
         }));
     content = definition(id, initial, {
         ...callbacks,
-        onEnable(state, context) {
-            state = publish(state, context);
-            return callbacks.onEnable ? callbacks.onEnable(state, context) : state;
+        onEnable(state, self) {
+            state = publish(state, self);
+            return callbacks.onEnable ? callbacks.onEnable(state, self) : state;
         },
-        onDisable(state, context) {
-            state = transitionUnit(state, context.ref.host.id, (unit) => ({
+        onDisable(state, self) {
+            state = transitionUnit(state, self.host.id, (unit) => ({
                 ...unit,
-                [capability]: remove(unit[capability], key(context.ref)),
+                [capability]: remove(unit[capability], key(effectRef(self))),
             }));
-            return callbacks.onDisable ? callbacks.onDisable(state, context) : state;
+            return callbacks.onDisable ? callbacks.onDisable(state, self) : state;
         },
     });
     return content;

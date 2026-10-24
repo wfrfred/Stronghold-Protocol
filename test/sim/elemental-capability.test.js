@@ -1,3 +1,4 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { fixtureBattle } from "../helpers/unit.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -177,8 +178,8 @@ test('request-specific damage Hooks can reduce one element without changing comm
 const epShield = (id, budget) => ({
   id,
   initialize: () => ({ remaining: budget }),
-  onEnable(battle, context) {
-    const address = context.ref;
+  onEnable(battle, effectSelf) {
+    const address = effectRef(effectSelf);
     return change(battle, address.host, state => setDamageHook(state, {
       id: `shield/${address.id}`,
       accepts: current => {
@@ -196,8 +197,8 @@ const epShield = (id, budget) => ({
       },
     }));
   },
-  onDisable(battle, context) {
-    return change(battle, context.ref.host, state => removeDamageHook(state, `shield/${context.ref.id}`));
+  onDisable(battle, self) {
+    return change(battle, self.host, state => removeDamageHook(state, `shield/${self.id}`));
   },
 });
 

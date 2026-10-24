@@ -1,3 +1,4 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { deadline, setDeadline } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
@@ -139,24 +140,24 @@ function harness({ stackCount = 3, maxValidStackCnt = -1 } = {}) {
         { stackCount, lifetimeTicks: 30, sample: sample(stackCount) },
         output,
         {
-            onTick(state, ctx) {
-                if (ctx.tick < deadline(ctx.self)) return state;
+            onTick(state, self) {
+                if (state.tick < deadline(self)) return state;
                 const plan = policy.expire(
-                    { stackCount: ctx.self.data.stackCount, expiresAtTick: deadline(ctx.self) },
-                    ctx.self.data.lifetimeTicks, ctx.tick,
+                    { stackCount: self.data.stackCount, expiresAtTick: deadline(self) },
+                    self.data.lifetimeTicks, state.tick,
                 );
-                if (plan.type === "FINISH") return effects.end(state, ctx.ref, "EXPIRED");
-                state = effects.update(state, ctx.ref, data => ({
+                if (plan.type === "FINISH") return effects.end(state, effectRef(self), "EXPIRED");
+                state = effects.update(state, effectRef(self), data => ({
                     ...data,
                     stackCount: plan.stackCount,
                     sample: plan.reloadModifiers ? sample(plan.stackCount) : data.sample,
                 }));
                 state = replaceEffectFixture(
                     state,
-                    ctx.ref,
-                    setDeadline(effects.get(state, ctx.ref), plan.expiresAtTick),
+                    effectRef(self),
+                    setDeadline(effects.get(state, effectRef(self)), plan.expiresAtTick),
                 );
-                return refreshContribution(state, ctx.ref, content, output);
+                return refreshContribution(state, effectRef(self), content, output);
             },
         },
     );

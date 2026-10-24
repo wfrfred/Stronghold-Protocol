@@ -7,7 +7,7 @@ import { create as createAttack, isAttack } from "../content/tactical/actions/at
 import { calculateDamage } from "../core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../core/tactical/battle/damage/apply.js";
 import type { DamageRequest } from "../core/tactical/battle/damage/contract.js";
-import { ref as unitRef } from "../core/tactical/unit/query.js";
+import { get as getCurrentUnit, ref as unitRef } from "../core/tactical/unit/query.js";
 import * as tracking from "../content/tactical/projectiles/tracking.js";
 
 import { getUnit, updateUnit, type State as BattleState } from "../core/tactical/battle/state.js";
@@ -35,23 +35,32 @@ export function createTacticalProjectileDemo(
     const boost: Definition<object, Offense> = {
         id: "post-launch-attack-boost",
         initialize: () => ({}),
-        onEnable: (state, context) => {
+        onEnable: (state, self) => {
+            const unit = getCurrentUnit(state, self.host);
+
+            if (unit === undefined) {
+                return state;
+            }
+
             return updateUnit(state, {
-                ...context.unit,
-                offense: setAttackContribution(context.unit.offense, {
-                    id: `@effect/${context.self.id}/attack`,
+                ...unit,
+                offense: setAttackContribution(unit.offense, {
+                    id: `@effect/${self.id}/attack`,
                     value: [attribute.create({ addition: 60 })],
                     group: { id: "demo-attack-boost", priority: 1 },
                 }),
             });
         },
-        onDisable: (state, context) => {
+        onDisable: (state, self) => {
+            const unit = getCurrentUnit(state, self.host);
+
+            if (unit === undefined) {
+                return state;
+            }
+
             return updateUnit(state, {
-                ...context.unit,
-                offense: removeAttackContribution(
-                    context.unit.offense,
-                    `@effect/${context.self.id}/attack`,
-                ),
+                ...unit,
+                offense: removeAttackContribution(unit.offense, `@effect/${self.id}/attack`),
             });
         },
     };

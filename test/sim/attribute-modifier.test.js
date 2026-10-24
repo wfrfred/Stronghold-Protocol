@@ -222,9 +222,9 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
         "compiled-mire",
         {},
         {
-            onEnable(state, ctx) {
-                const id = `${ctx.ref.id}`;
-                return transitionUnit(state, ctx.ref.host.id, (unit) => ({
+            onEnable(state, self) {
+                const id = `${self.id}`;
+                return transitionUnit(state, self.host.id, (unit) => ({
                     ...unit,
                     action: setSpeedContribution(unit.action, {
                         id,
@@ -236,9 +236,9 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
                     }),
                 }));
             },
-            onDisable(state, ctx) {
-                const id = `${ctx.ref.id}`;
-                return transitionUnit(state, ctx.ref.host.id, (unit) => ({
+            onDisable(state, self) {
+                const id = `${self.id}`;
+                return transitionUnit(state, self.host.id, (unit) => ({
                     ...unit,
                     action: removeSpeedContribution(unit.action, id),
                     locomotion: removeMoveSpeedContribution(unit.locomotion, id),

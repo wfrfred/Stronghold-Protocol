@@ -6,12 +6,18 @@ import * as locomotion from "../../../core/tactical/unit/capability/locomotion/c
 import * as movement from "../../../core/tactical/unit/capability/locomotion/operations.js";
 import * as skill from "../../../core/tactical/unit/capability/skill/capability.js";
 import { cancelForUnit } from "../../../core/tactical/unit/action/operations.js";
-import { ref } from "../../../core/tactical/unit/query.js";
+import * as units from "../../../core/tactical/unit/query.js";
 
 export const stun: Definition<object> = {
     id: "control/stun",
     initialize: () => ({}),
-    onEnable(state, { unit, self }) {
+    onEnable(state, self) {
+        const unit = units.get(state, self.host);
+
+        if (unit === undefined) {
+            return state;
+        }
+
         const id = `@effect/${self.id}/stun`;
         const rule = { id, allows: () => false };
 
@@ -27,9 +33,15 @@ export const stun: Definition<object> = {
                 : {}),
         });
 
-        return cancelForUnit(state, ref(unit), "INTERRUPTED");
+        return cancelForUnit(state, self.host, "INTERRUPTED");
     },
-    onDisable(state, { unit, self }) {
+    onDisable(state, self) {
+        const unit = units.get(state, self.host);
+
+        if (unit === undefined) {
+            return state;
+        }
+
         const id = `@effect/${self.id}/stun`;
 
         state = updateUnit(state, {

@@ -1,3 +1,5 @@
+import { get as unitQueryGet } from "../../dist/core/tactical/unit/query.js";
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -36,16 +38,16 @@ test("effects: a direct static definition initializes private state and runs ins
         "direct",
         { count: 0 },
         {
-            onInstall(state, context) {
-                assert.equal(get(state, context.ref).definition, value);
-                state = effect.update(state, context.ref, (current) => ({
+            onInstall(state, self) {
+                assert.equal(get(state, effectRef(self)).definition, value);
+                state = effect.update(state, effectRef(self), (current) => ({
                     count: current.count + 1,
                 }));
-                seen.push(["install", get(state, context.ref).data.count]);
+                seen.push(["install", get(state, effectRef(self)).data.count]);
                 return state;
             },
-            onEnable(state, context) {
-                seen.push(["enable", context.self.data.count]);
+            onEnable(state, self) {
+                seen.push(["enable", self.data.count]);
                 return state;
             },
         },
@@ -128,13 +130,13 @@ test("effects: content explicitly refreshes a static contribution after changing
 test("effects: ending withdraws outputs before terminal business and repeated ending does nothing", () => {
     const seen = [];
     const value = attackBuff("ending", 20, {
-        onDisable(state, context) {
-            seen.push(["disable", context.self.status]);
+        onDisable(state, self) {
+            seen.push(["disable", self.status]);
             return state;
         },
-        onEnd(state, context) {
-            seen.push(["end", context.reason, resolveAttack(state, unitRef(getUnit(state, 0)))]);
-            return effect.end(state, context.ref, "REENTRANT");
+        onEnd(state, self, reason) {
+            seen.push(["end", reason, resolveAttack(state, unitRef(getUnit(state, 0)))]);
+            return effect.end(state, effectRef(self), "REENTRANT");
         },
     });
     let battle = effectFixtureWork(unit());
@@ -155,19 +157,20 @@ test("effects: callbacks read current Unit state after a preceding nested operat
         "current-host",
         {},
         {
-            onInstall(state, context) {
+            onInstall(state, self) {
+                const sampledHost = unitQueryGet(state, self.host);
                 state = transitionUnit(state, 0, (current) => ({
                     ...current,
                     vitality: { ...current.vitality, hp: 30 },
                 }));
-                assert.equal(context.unit.vitality.hp, 100, "Context retains its input version");
-                assert.equal(getUnit(state, 0).vitality.hp, 30);
+                assert.equal(sampledHost.vitality.hp, 100, "An explicitly sampled host retains its input version");
+                assert.equal(unitQueryGet(state, self.host).vitality.hp, 30);
                 return state;
             },
-            onTick(state, context) {
-                return effect.update(state, context.ref, () => ({
-                    observedHp: context.unit.vitality.hp,
-                    tick: context.tick,
+            onTick(state, self) {
+                return effect.update(state, effectRef(self), () => ({
+                    observedHp: unitQueryGet(state, self.host).vitality.hp,
+                    tick: state.tick,
                 }));
             },
         },
@@ -179,16 +182,16 @@ test("effects: callbacks read current Unit state after a preceding nested operat
     assert.deepEqual(get(battle, ref).data, { observedHp: 30, tick: 7 });
 });
 
-test("effects: a callback sees termination when a nested operation ends its instance", () => {
+test("effects: a callback retains its input instance after a nested operation ends it", () => {
     const seen = [];
     const value = definition(
         "ended-by-operation",
         {},
         {
-            onTick(state, context) {
-                state = effect.end(state, context.ref, "EXPLICIT");
-                seen.push(context.self.status);
-                assert.equal(get(state, context.ref), undefined);
+            onTick(state, self) {
+                state = effect.end(state, effectRef(self), "EXPLICIT");
+                seen.push(self.status);
+                assert.equal(get(state, effectRef(self)), undefined);
                 return state;
             },
         },
@@ -199,6 +202,6 @@ test("effects: a callback sees termination when a nested operation ends its inst
 
     battle = effect.advance(at(battle, 1));
 
-    assert.deepEqual(seen, ["ACTIVE"], "Context values retain their input version after ending");
+    assert.deepEqual(seen, ["ACTIVE"], "self retains its input version after ending");
     assert.equal(get(battle, ref), undefined);
 });

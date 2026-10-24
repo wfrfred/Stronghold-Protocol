@@ -1,3 +1,4 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { setDeadline } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -19,16 +20,16 @@ test("effect deadlines: one time advance ticks the active Effect then ends it at
         "deadline",
         {},
         {
-            onTick: (state, context) => {
-                trace.push(["tick", context.tick]);
+            onTick: (state, self) => {
+                trace.push(["tick", state.tick]);
                 return state;
             },
             onDisable: (state) => {
                 trace.push(["disable"]);
                 return state;
             },
-            onEnd: (state, context) => {
-                trace.push(["end", context.self.status]);
+            onEnd: (state, self) => {
+                trace.push(["end", self.status]);
                 return state;
             },
         },
@@ -51,18 +52,18 @@ test("effect deadlines: layered content renews the same identity and ends only a
         "layered",
         { layers: 3, deadline: 2 },
         {
-            onTick(state, context) {
-                if (context.tick < context.self.data.deadline) return state;
-                const layers = context.self.data.layers - 1;
+            onTick(state, self) {
+                if (state.tick < self.data.deadline) return state;
+                const layers = self.data.layers - 1;
                 if (layers === 0) {
-                    return effect.end(state, context.ref, "LAYERS_EXHAUSTED");
+                    return effect.end(state, effectRef(self), "LAYERS_EXHAUSTED");
                 }
-                const deadline = context.tick + 2;
-                state = effect.update(state, context.ref, data => ({ ...data, layers, deadline }));
+                const deadline = state.tick + 2;
+                state = effect.update(state, effectRef(self), data => ({ ...data, layers, deadline }));
                 return replaceEffectFixture(
                     state,
-                    context.ref,
-                    setDeadline(get(state, context.ref), deadline),
+                    effectRef(self),
+                    setDeadline(get(state, effectRef(self)), deadline),
                 );
             },
         },

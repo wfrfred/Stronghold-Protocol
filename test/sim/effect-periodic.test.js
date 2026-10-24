@@ -1,3 +1,4 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -20,13 +21,13 @@ test("effect time: content controls periodic intervals and state is visible befo
         "periodic",
         { nextTick: 0, count: 0 },
         {
-            onTick(state, context) {
-                if (context.tick < context.self.data.nextTick) return state;
-                state = effect.update(state, context.ref, (current) => ({
-                    nextTick: context.tick + 3,
+            onTick(state, self) {
+                if (state.tick < self.data.nextTick) return state;
+                state = effect.update(state, effectRef(self), (current) => ({
+                    nextTick: state.tick + 3,
                     count: current.count + 1,
                 }));
-                seen.push([context.tick, get(state, context.ref).data.count]);
+                seen.push([state.tick, get(state, effectRef(self)).data.count]);
                 return state;
             },
         },
@@ -63,11 +64,11 @@ test("effect time: periodic progress pauses while inactive and resumes from the 
         "paused-periodic",
         { progress: 0 },
         {
-            onTick(state, context) {
-                const progress = context.self.data.progress + 1;
-                state = effect.update(state, context.ref, data => ({ progress: progress === 5 ? 0 : progress }));
+            onTick(state, self) {
+                const progress = self.data.progress + 1;
+                state = effect.update(state, effectRef(self), data => ({ progress: progress === 5 ? 0 : progress }));
 
-                if (progress === 5) triggered.push(context.tick);
+                if (progress === 5) triggered.push(state.tick);
                 return state;
             },
         },
@@ -108,13 +109,13 @@ test("effect time: a new Effect waits for the next advance while ended candidate
         "first",
         { spawned: false },
         {
-            onTick(state, context) {
+            onTick(state, self) {
                 seen.push("first");
-                if (context.self.data.spawned) return state;
-                state = effect.update(state, context.ref, data => ({ spawned: true }));
+                if (self.data.spawned) return state;
+                state = effect.update(state, effectRef(self), data => ({ spawned: true }));
                 state = effect.install(
                     state,
-                    unitRef(getUnit(state, context.unit.id)),
+                    unitRef(getUnit(state, self.host.id)),
                     newborn,
                     {},
                 ).state;
@@ -146,8 +147,8 @@ test("effect time: zero shield charges do not suspend the periodic recharge Effe
         "shield-recharge",
         { charges: 0 },
         {
-            onTick(state, context) {
-                return effect.update(state, context.ref, (current) => ({
+            onTick(state, self) {
+                return effect.update(state, effectRef(self), (current) => ({
                         charges: Math.min(3, current.charges + 1),
                     }));
             },

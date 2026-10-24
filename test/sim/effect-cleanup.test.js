@@ -1,3 +1,4 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import assert from "node:assert/strict";
@@ -20,9 +21,9 @@ test("effect cleanup: terminal business sees the ending instance and ending imme
         "terminal",
         { count: 3 },
         {
-            onEnd(state, context) {
-                assert.equal(get(state, context.ref).status, "ENDING");
-                seen.push(context.self.data.count);
+            onEnd(state, self) {
+                assert.equal(get(state, effectRef(self)).status, "ENDING");
+                seen.push(self.data.count);
                 return state;
             },
         },
@@ -44,10 +45,10 @@ test("effect cleanup: a replacement installed during end uses a new identity and
         "old",
         {},
         {
-            onEnd(state, context) {
+            onEnd(state, self) {
                 const installed = effect.install(
                     state,
-                    unitRef(context.unit),
+                    self.host,
                     replacement,
                     {},
                 );

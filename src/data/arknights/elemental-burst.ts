@@ -58,7 +58,13 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
             defense: profile.defReduction,
             resistance: profile.resReduction,
         }),
-        onEnable: (battle, { unit, self }) => {
+        onEnable: (battle, self) => {
+            const unit = units.get(battle, self.host);
+
+            if (unit === undefined) {
+                return battle;
+            }
+
             let vitality = unit.vitality;
 
             if (self.data.defense !== 0) {
@@ -76,7 +82,13 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
 
             return vitality === unit.vitality ? battle : updateUnit(battle, { ...unit, vitality });
         },
-        onDisable: (battle, { unit, self }) => {
+        onDisable: (battle, self) => {
+            const unit = units.get(battle, self.host);
+
+            if (unit === undefined) {
+                return battle;
+            }
+
             const vitality = removeResistanceContribution(
                 removeDefenseContribution(unit.vitality, `@effect/${self.id}/defense`),
                 `@effect/${self.id}/resistance`,
@@ -88,7 +100,13 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
     const paralysis: EffectDefinition<{ remaining: number }, Action> = {
         id: `${id}/paralysis`,
         initialize: () => ({ remaining: profile.paralysisStacks }),
-        onInstall: (battle, { unit, self }) => {
+        onInstall: (battle, self) => {
+            const unit = units.get(battle, self.host);
+
+            if (unit === undefined) {
+                return battle;
+            }
+
             const effectId = self.id;
 
             return updateUnit(battle, {
@@ -128,11 +146,16 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
                 }),
             });
         },
-        onEnd: (battle, { unit, self }) =>
-            updateUnit(battle, {
-                ...unit,
-                action: removeBeforeReleaseHook(unit.action, `@effect/${self.id}/paralysis`),
-            }),
+        onEnd: (battle, self) => {
+            const unit = units.get(battle, self.host);
+
+            return unit === undefined
+                ? battle
+                : updateUnit(battle, {
+                      ...unit,
+                      action: removeBeforeReleaseHook(unit.action, `@effect/${self.id}/paralysis`),
+                  });
+        },
     };
     const periodic: EffectDefinition<Clock, Elemental> = {
         id: `${id}/periodic`,
@@ -141,8 +164,10 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
             lastAdvancedTick: 0,
             scaler: 1 - profile.attackReductionRatio,
         }),
-        onEnable: (battle, { unit, self }) =>
-            profile.attackReductionRatio > 0 && hasOffense(unit)
+        onEnable: (battle, self) => {
+            const unit = units.get(battle, self.host);
+
+            return unit !== undefined && profile.attackReductionRatio > 0 && hasOffense(unit)
                 ? updateUnit(battle, {
                       ...unit,
                       offense: setAttackContribution(unit.offense, {
@@ -150,15 +175,20 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
                           value: [attribute.create({ finalScaler: self.data.scaler })],
                       }),
                   })
-                : battle,
-        onDisable: (battle, { unit, self }) =>
-            profile.attackReductionRatio > 0 && hasOffense(unit)
+                : battle;
+        },
+        onDisable: (battle, self) => {
+            const unit = units.get(battle, self.host);
+
+            return unit !== undefined && profile.attackReductionRatio > 0 && hasOffense(unit)
                 ? updateUnit(battle, {
                       ...unit,
                       offense: removeAttackContribution(unit.offense, `@effect/${self.id}/attack`),
                   })
-                : battle,
-        onTick: (battle, { self, ref }) => {
+                : battle;
+        },
+        onTick: (battle, self) => {
+            const ref = effectRef(self);
             const scope = self.scopes.find((scope) => scope.type === "ELEMENTAL_BURST");
 
             if (scope === undefined || getBurst(battle, scope.ref)?.status !== "ACTIVE") {

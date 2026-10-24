@@ -1,3 +1,4 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as field from "../../dist/core/tactical/battlefield/state.js";
@@ -7,7 +8,6 @@ import {
 } from "../../dist/core/tactical/battle/state.js";
 import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { dependents } from "../../dist/core/tactical/unit/effect/dependency.js";
 import { initialize, fixtureBattle } from "../helpers/unit.js";
 
@@ -64,11 +64,11 @@ test("dependency writes precede install callbacks and support nested dependent c
     let nested;
     const result = effects.install(battle, { id: 1 }, {
         id: "parent", initialize: () => ({}),
-        onInstall(current, context) {
-            assert.deepEqual(dependents(current.effect.dependency, lifetime), [context.ref]);
+        onInstall(current, self) {
+            assert.deepEqual(dependents(current.effect.dependency, lifetime), [effectRef(self)]);
             const child = effects.install(current, { id: 3 }, {
                 id: "child", initialize: () => ({}),
-            }, { scopes: [{ type: "EFFECT", ref: context.ref }] });
+            }, { scopes: [{ type: "EFFECT", ref: effectRef(self) }] });
             nested = child.value;
             return child.state;
         },

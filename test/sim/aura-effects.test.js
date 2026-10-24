@@ -1,3 +1,4 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
 import assert from "node:assert/strict";
@@ -77,9 +78,9 @@ test("ordinary end policies decide each receiver against current state", () => {
     const trace = [];
     const marker = definition("retention-marker");
     const receiver = attackEffect("retention", {
-        onEnd(state, ctx) {
-            trace.push(["end", ctx.ref.host.id]);
-            return ctx.ref.host.id === 1
+        onEnd(state, self) {
+            trace.push(["end", self.host.id]);
+            return self.host.id === 1
                 ? effects.install(state, unitRef(getUnit(state, 2)), marker, {}).state
                 : state;
         },
@@ -88,7 +89,7 @@ test("ordinary end policies decide each receiver against current state", () => {
         "retention-aura",
         { bindings: [] },
         {
-            onEnable(state, ctx) {
+            onEnable(state, self) {
                 for (const unitId of [1, 2]) {
                     const installed = effects.install(
                         state,
@@ -97,15 +98,15 @@ test("ordinary end policies decide each receiver against current state", () => {
                         {},
                     );
                     state = installed.state;
-                    state = effects.update(state, ctx.ref, (current) => ({
+                    state = effects.update(state, effectRef(self), (current) => ({
                             ...current,
                             bindings: [...current.bindings, { unitId, ref: installed.value }],
                         }));
                 }
                 return state;
             },
-            onEnd(state, ctx) {
-                for (const binding of ctx.self.data.bindings) {
+            onEnd(state, self) {
+                for (const binding of self.data.bindings) {
                     const keep = getUnit(state, binding.unitId).effects.values().toArray().some(
                         (value) => value.definition === marker,
                     );
@@ -159,8 +160,8 @@ test("group suppression preserves aura members and child identities", () => {
 test("reenabling refreshes departed receivers before restoring child outputs", () => {
     const enabled = [];
     const receiver = attackEffect("resume", {
-        onEnable: (state, ctx) => {
-            enabled.push(ctx.ref.host.id);
+        onEnable: (state, self) => {
+            enabled.push(self.host.id);
             return state;
         },
     });
@@ -185,9 +186,9 @@ test("reenabling refreshes departed receivers before restoring child outputs", (
 test("nested installation can disable an aura before later receivers enter", () => {
     const starts = [];
     const receiver = attackEffect("nested-stop", {
-        onInstall(state, ctx) {
-            starts.push(ctx.ref.host.id);
-            return effects.setEnabled(state, ctx.self.scopes[0].ref, false);
+        onInstall(state, self) {
+            starts.push(self.host.id);
+            return effects.setEnabled(state, self.scopes[0].ref, false);
         },
     });
     let battle = effectFixtureWork(auraUnit(0), auraUnit(1), auraUnit(2));
@@ -202,9 +203,9 @@ test("nested installation can disable an aura before later receivers enter", () 
 test("nested child installation ending the aura does not revive parent or child", () => {
     const starts = [];
     const receiver = attackEffect("nested-end", {
-        onInstall(state, ctx) {
-            starts.push(ctx.ref.host.id);
-            return effects.end(state, ctx.self.scopes[0].ref, "EXPLICIT");
+        onInstall(state, self) {
+            starts.push(self.host.id);
+            return effects.end(state, self.scopes[0].ref, "EXPLICIT");
         },
     });
     let battle = effectFixtureWork(auraUnit(0), auraUnit(1), auraUnit(2));

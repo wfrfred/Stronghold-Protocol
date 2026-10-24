@@ -22,7 +22,7 @@ import type { Route, Definition as RouteDefinition } from ${source('unit/capabil
 import type { Elemental } from ${source('unit/capability/elemental/capability')};
 import type { Definition as EffectDefinition } from ${source('unit/effect/definition')};
 import { install } from ${source('unit/effect/operations')};
-import { ref } from ${source('unit/query')};
+import { ref, get } from ${source('unit/query')};
 import { initialize as initializeRoutedUnit } from ${source('battle/creation/routed-unit')};
 import type { EnemySpawnDefinition } from ${source('battle/schedule/definition')};
 import type { Input as RouteInput } from ${source('battle/creation/route')};
@@ -56,9 +56,10 @@ const scheduled: EnemySpawnDefinition = {
 };
 const healthAttack: EffectDefinition<{ bonus: number }, Vitality & Offense> = {
   id: 'health-attack', initialize: () => ({ bonus: 0 }),
-  onEnable(state, context) {
-    const hp: number = context.unit.vitality.hp;
-    const attack: number = context.unit.definition.offense.attack;
+  onEnable(state, self) {
+    const current = get(state, self.host)!;
+    const hp: number = current.vitality.hp;
+    const attack: number = current.definition.offense.attack;
     return state;
   },
 };

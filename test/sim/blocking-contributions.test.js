@@ -1,3 +1,4 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { view } from "../../dist/core/tactical/battlefield/view.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -359,26 +360,26 @@ test("blocking capacity: native stack renewal and terminal cleanup update real b
         { stackCount: 3, lifetimeTicks: 2 },
         setting,
         {
-            onTick(state, ctx) {
-                if (ctx.tick < deadline(ctx.self)) return state;
+            onTick(state, self) {
+                if (state.tick < deadline(self)) return state;
                 const plan = rule.expire(
-                    { stackCount: ctx.self.data.stackCount, expiresAtTick: deadline(ctx.self) },
-                    ctx.self.data.lifetimeTicks,
-                    ctx.tick,
+                    { stackCount: self.data.stackCount, expiresAtTick: deadline(self) },
+                    self.data.lifetimeTicks,
+                    state.tick,
                 );
                 if (plan.type === "FINISH")
-                    return effects.end(state, ctx.ref, "EXPIRED");
+                    return effects.end(state, effectRef(self), "EXPIRED");
                 else {
-                    state = effects.update(state, ctx.ref, data => ({
+                    state = effects.update(state, effectRef(self), data => ({
                         ...data,
                         stackCount: plan.stackCount,
                     }));
                     state = replaceEffectFixture(
                         state,
-                        ctx.ref,
-                        setDeadline(effects.get(state, ctx.ref), plan.expiresAtTick),
+                        effectRef(self),
+                        setDeadline(effects.get(state, effectRef(self)), plan.expiresAtTick),
                     );
-                    return refreshContribution(state, ctx.ref, content, setting);
+                    return refreshContribution(state, effectRef(self), content, setting);
                 }
             },
         },

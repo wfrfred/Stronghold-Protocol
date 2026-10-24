@@ -1,3 +1,4 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -106,8 +107,8 @@ test("aura runtime: predefined, deployment and spawning join before the same tic
 
     const starts = [];
     const receiver = attackEffect("registration-receiver", {
-        onInstall: (state, context) => {
-            starts.push([context.ref.host.id, context.tick]);
+        onInstall: (state, self) => {
+            starts.push([self.host.id, state.tick]);
             return state;
         },
     });
@@ -198,8 +199,8 @@ test("aura runtime: movement departure is observed at the next aura tick", () =>
 
     let before;
     const receiver = attackEffect("moving-receiver", {
-        onEnable: (state, context) => {
-            if (context.ref.host.id === 2) {
+        onEnable: (state, self) => {
+            if (self.host.id === 2) {
                 const view = battlefieldView(state);
                 before = { units: view.unitIds.map((id) => view.getUnit(id)) };
             }
@@ -249,10 +250,10 @@ test("aura runtime: callback failure propagates the original error without publi
     const attempts = [];
     let receiver;
     receiver = attackEffect("fallible-aura-receiver", {
-        onInstall: (state, context) => {
-            state = effects.update(state, context.ref, (current) => ({ ...current, starts: 1 }));
-            if (context.ref.host.id === 2) {
-                attempts.push(context.ref);
+        onInstall: (state, self) => {
+            state = effects.update(state, effectRef(self), (current) => ({ ...current, starts: 1 }));
+            if (self.host.id === 2) {
+                attempts.push(effectRef(self));
                 throw failure;
             }
             return state;

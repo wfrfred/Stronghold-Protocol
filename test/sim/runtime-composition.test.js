@@ -1,3 +1,4 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { fixtureBattle } from "../helpers/unit.js";
 import { healing } from "../helpers/vitality.js";
@@ -93,19 +94,19 @@ function scenario({ failure = null, cancelled = false } = {}) {
     const registerBuff = (id, addition) => ({
         id,
         initialize: () => ({ starts: 0, enables: 0 }),
-        onInstall(state, context) {
-            return updateEffect(state, context.ref, (current) => ({
+        onInstall(state, self) {
+            return updateEffect(state, effectRef(self), (current) => ({
                     ...current,
                     starts: current.starts + 1,
                 }));
         },
-        onEnable(state, context) {
-            state = updateEffect(state, context.ref, (current) => ({
+        onEnable(state, self) {
+            state = updateEffect(state, effectRef(self), (current) => ({
                     ...current,
                     enables: current.enables + 1,
                 }));
-            const id = `effect:${context.self.id}`;
-            return transitionUnit(state, context.ref.host.id, (unit) => {
+            const id = `effect:${self.id}`;
+            return transitionUnit(state, self.host.id, (unit) => {
                 const next = ({ ...unit, offense: setAttackContribution(unit.offense, {
                     id,
                     value: [modifier.create({ finalAddition: addition })],
@@ -113,9 +114,9 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 return next;
             });
         },
-        onDisable(state, context) {
-            const id = `effect:${context.self.id}`;
-            return transitionUnit(state, context.ref.host.id, (unit) => {
+        onDisable(state, self) {
+            const id = `effect:${self.id}`;
+            return transitionUnit(state, self.host.id, (unit) => {
                 const next = ({ ...unit, offense: removeAttackContribution(unit.offense, id) });
                 return next;
             });
@@ -131,9 +132,9 @@ function scenario({ failure = null, cancelled = false } = {}) {
     const receiver = {
         ...receiverOutput,
         initialize: () => ({ ...receiverOutput.initialize(), uses: 0 }),
-        onInstall(state, context) {
-            state = receiverOutput.onInstall(state, context);
-            const ref = context.ref;
+        onInstall(state, self) {
+            state = receiverOutput.onInstall(state, self);
+            const ref = effectRef(self);
             return transitionUnit(state, ref.host.id, (unit) =>
                 ({ ...unit, vitality: setDamageHook(unit.vitality, {
                     id: `receiver:${ref.id}`,
@@ -200,28 +201,28 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 }) }),
             );
         },
-        onEnd(state, context) {
-            return transitionUnit(state, context.ref.host.id, (unit) =>
-                ({ ...unit, vitality: removeDamageHook(unit.vitality, `receiver:${context.self.id}`) }),
+        onEnd(state, self) {
+            return transitionUnit(state, self.host.id, (unit) =>
+                ({ ...unit, vitality: removeDamageHook(unit.vitality, `receiver:${self.id}`) }),
             );
         },
     };
     aura = {
         id: "combined-aura",
         initialize: () => ({ remaining: 3, consumed: 0, receivers: [] }),
-        onInstall(state, context) {
-            auraAddress = context.ref;
+        onInstall(state, self) {
+            auraAddress = effectRef(self);
             return state;
         },
-        onTick(state, context) {
-            if (context.tick >= 3) {
-                return endEffect(state, context.ref, "AURA_FINISHED");
+        onTick(state, effectSelf) {
+            if (state.tick >= 3) {
+                return endEffect(state, effectRef(effectSelf), "AURA_FINISHED");
             }
             for (const unitId of battlefieldView(state).unitIds) {
-                const self = getEffect(state, context.ref);
+                const self = getEffect(state, effectRef(effectSelf));
                 if (self === undefined || self.status === "ENDING") return state;
                 if (self.data.receivers.some((binding) => binding.unitId === unitId)) continue;
-                state = updateEffect(state, context.ref, (current) => ({
+                state = updateEffect(state, effectRef(effectSelf), (current) => ({
                         ...current,
                         receivers: [...current.receivers, { unitId, ref: null, attempts: 1 }],
                     }));
@@ -230,14 +231,14 @@ function scenario({ failure = null, cancelled = false } = {}) {
                     unitRef(getUnit(state, unitId)),
                     receiver,
                     {
-                        source: context.ref.host.id,
-                        scopes: [{ type: "EFFECT", ref: context.ref }],
+                        source: effectSelf.host.id,
+                        scopes: [{ type: "EFFECT", ref: effectRef(effectSelf) }],
                     },
                                     );
                 state = installed.state;
                 const ref = installed.value;
                 assert.ok(ref);
-                state = updateEffect(state, context.ref, (current) => ({
+                state = updateEffect(state, effectRef(effectSelf), (current) => ({
                         ...current,
                         receivers: current.receivers.map((binding) =>
                             binding.unitId === unitId ? { ...binding, ref } : binding,

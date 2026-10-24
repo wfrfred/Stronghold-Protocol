@@ -1,3 +1,4 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -205,14 +206,14 @@ test("an Effect can own a deployment observer and remove it during source retire
     const calls = [];
     const effect = {
         id: "deployment-talent", initialize: () => ({}),
-        onInstall(state, context) {
-            const ref = context.ref;
+        onInstall(state, self) {
+            const ref = effectRef(self);
             return addHook(state, ref.host.id, record("talent", (state, fact) => {
                 calls.push(fact.unit.id);
                 return state;
             }, (state) => getUnit(state, ref.host.id)?.effects.get(ref.id)?.status === "ACTIVE"));
         },
-        onEnd(state, context) { return deleteHook(state, context.ref.host.id, "talent"); },
+        onEnd(state, self) { return deleteHook(state, self.host.id, "talent"); },
     };
     const source = definition("source", { onEnter(state, id) { return install(state, unitRef(getUnit(state, id)), effect).state; } });
     const runtime = new BattleRuntime(input({

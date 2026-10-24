@@ -3,6 +3,7 @@ import type { Definition } from "../../../core/tactical/unit/effect/definition.j
 import * as vitality from "../../../core/tactical/unit/capability/vitality/capability.js";
 import * as elemental from "../../../core/tactical/unit/capability/elemental/capability.js";
 import * as targetable from "../../../core/tactical/unit/capability/targetable/capability.js";
+import * as units from "../../../core/tactical/unit/query.js";
 import { untargetableRestriction } from "./visibility.js";
 
 export const invincibilityKind = Symbol("invincibility");
@@ -22,7 +23,13 @@ export const healFreeRestriction: targetable.Restriction = {
 export const invincible: Definition<object, targetable.Targetable> = {
     id: "protection/invincible",
     initialize: () => ({}),
-    onEnable(state, { unit, self }) {
+    onEnable(state, self) {
+        const unit = units.get(state, self.host);
+
+        if (unit === undefined) {
+            return state;
+        }
+
         const id = `@effect/${self.id}/invincible`;
 
         return updateUnit(state, {
@@ -49,7 +56,13 @@ export const invincible: Definition<object, targetable.Targetable> = {
                 : {}),
         });
     },
-    onDisable(state, { unit, self }) {
+    onDisable(state, self) {
+        const unit = units.get(state, self.host);
+
+        if (unit === undefined) {
+            return state;
+        }
+
         const id = `@effect/${self.id}/invincible`;
 
         return updateUnit(state, {
@@ -68,7 +81,13 @@ export const invincible: Definition<object, targetable.Targetable> = {
 export const healFree: Definition<object, targetable.Targetable> = {
     id: "protection/heal-free",
     initialize: () => ({}),
-    onEnable(state, { unit, self }) {
+    onEnable(state, self) {
+        const unit = units.get(state, self.host);
+
+        if (unit === undefined) {
+            return state;
+        }
+
         return updateUnit(state, {
             ...unit,
             targetable: targetable.setRestriction(unit.targetable, {
@@ -77,7 +96,13 @@ export const healFree: Definition<object, targetable.Targetable> = {
             }),
         });
     },
-    onDisable(state, { unit, self }) {
+    onDisable(state, self) {
+        const unit = units.get(state, self.host);
+
+        if (unit === undefined) {
+            return state;
+        }
+
         return updateUnit(state, {
             ...unit,
             targetable: targetable.removeRestriction(

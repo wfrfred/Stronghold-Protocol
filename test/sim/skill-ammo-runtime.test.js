@@ -30,11 +30,11 @@ const range = [{ type: "CIRCLE", offset: [0, 0], radius: 8 }];
 
 function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, output, actionProgram, hideAfterDamage = false } = {}) {
   const buff = attackBuff("runtime-ammo-attack", 100, {
-    onInstall: (state, context) => {
-      if (hideAfterDamage) state = transitionUnit(state, context.unit.id, current => ({
+    onInstall: (state, self) => {
+      if (hideAfterDamage) state = transitionUnit(state, self.host.id, current => ({
         ...current, vitality: setHook(current.vitality, {
           id: "hide-after-damage", stage: "hpApplied", priority: 0,
-          accepts: (_state, event) => event.request.source?.id === context.unit.id,
+          accepts: (_state, event) => event.request.source?.id === self.host.id,
           invoke: (state, context, current) => {
             assert.equal(context.application.hpLoss, 200);
             return { state: transitionUnit(state, context.request.source.id, current => ({
@@ -43,17 +43,17 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
           },
         }),
       }));
-      if (interrupt) state = transitionUnit(state, context.unit.id, current => ({ ...current, action: setBeforeReleaseHook(current.action, {
+      if (interrupt) state = transitionUnit(state, self.host.id, current => ({ ...current, action: setBeforeReleaseHook(current.action, {
         id: "ammo-interrupt", accepts: () => true,
         invoke: state => ({ state, value: { type: "INTERRUPT", recoveryTicks: 15 } }),
       }) }));
       return state;
     },
-    onEnd: (state, context) => {
-      if (hideAfterDamage) state = transitionUnit(state, context.unit.id, current => ({
+    onEnd: (state, self) => {
+      if (hideAfterDamage) state = transitionUnit(state, self.host.id, current => ({
         ...current, vitality: removeHook(current.vitality, "hide-after-damage"),
       }));
-      if (interrupt) state = transitionUnit(state, context.unit.id, current => ({ ...current, action: removeBeforeReleaseHook(current.action, "ammo-interrupt") }));
+      if (interrupt) state = transitionUnit(state, self.host.id, current => ({ ...current, action: removeBeforeReleaseHook(current.action, "ammo-interrupt") }));
       return state;
     },
   });

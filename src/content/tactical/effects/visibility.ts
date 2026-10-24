@@ -14,7 +14,13 @@ function restriction(
     return {
         id,
         initialize: () => ({}),
-        onEnable(state, { unit, self }) {
+        onEnable(state, self) {
+            const unit = units.get(state, self.host);
+
+            if (unit === undefined) {
+                return state;
+            }
+
             return updateUnit(state, {
                 ...unit,
                 targetable: targetable.setRestriction(unit.targetable, {
@@ -23,7 +29,13 @@ function restriction(
                 }),
             });
         },
-        onDisable(state, { unit, self }) {
+        onDisable(state, self) {
+            const unit = units.get(state, self.host);
+
+            if (unit === undefined) {
+                return state;
+            }
+
             return updateUnit(state, {
                 ...unit,
                 targetable: targetable.removeRestriction(

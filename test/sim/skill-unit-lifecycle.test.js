@@ -15,9 +15,9 @@ function fixture(callbacks = {}) {
     const ended = [];
     const disabled = [];
     const owned = effectDefinition("skill-owned", {}, {
-        onDisable(battle, context) {
-            disabled.push(context.ref.id);
-            return callbacks.disable?.(battle, context) ?? battle;
+        onDisable(battle, self) {
+            disabled.push(self.id);
+            return callbacks.disable?.(battle, self) ?? battle;
         },
     });
     const installOwned = (battle, self, expected = true) => {

@@ -194,7 +194,7 @@ test("action: private progress is visible to nested callbacks before their busin
     let observed;
     const dependency = {
         ...ownedEffect,
-        onInstall(state, context) {
+        onInstall(state) {
             observed = actions.get(state, currentRef).state.progress;
             return state;
         },

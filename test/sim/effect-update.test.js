@@ -4,6 +4,7 @@ import { initialize, fixtureBattle } from "../helpers/unit.js";
 import { registerUnit, removeUnit, getUnit } from "../../dist/core/tactical/battle/state.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 
 function fixture(data, callbacks = {}, initial = {}) {
     const host = initialize({
@@ -79,13 +80,15 @@ test("Effect update does not call its transform after the instance or its host h
 test("Effect update remains available during both ENDING callbacks without reviving the instance", () => {
     const observed = [];
     const created = fixture({ phases: [] }, {
-        onDisable(state, { ref }) {
+        onDisable(state, self) {
+            const ref = effectRef(self);
             assert.equal(effects.get(state, ref).status, "ENDING");
             state = effects.update(state, ref, data => ({ ...data, phases: [...data.phases, "disable"] }));
             observed.push(effects.get(state, ref).data.phases);
             return state;
         },
-        onEnd(state, { ref, self }) {
+        onEnd(state, self) {
+            const ref = effectRef(self);
             assert.deepEqual(self.data.phases, ["disable"]);
             state = effects.update(state, ref, data => ({ ...data, phases: [...data.phases, "end"] }));
             assert.equal(effects.get(state, ref).status, "ENDING");
@@ -105,11 +108,12 @@ test("Effect update remains available during both ENDING callbacks without reviv
 test("Effect installation callbacks can initialize private data before enable observes it", () => {
     const observed = [];
     const created = fixture({ count: 0 }, {
-        onInstall(state, { ref }) {
+        onInstall(state, self) {
+            const ref = effectRef(self);
             assert.equal(effects.get(state, ref).status, "INSTALLING");
             return effects.update(state, ref, data => ({ ...data, count: data.count + 1 }));
         },
-        onEnable(state, { self }) {
+        onEnable(state, self) {
             observed.push(self.data.count);
             return state;
         },

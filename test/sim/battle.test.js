@@ -1088,8 +1088,8 @@ test('core battle publishes a completed tick only after all operations succeed',
     let observedRuntime;
     let observedSnapshot;
     let observedMaps;
-    const lifecycle = { id: 'late-failure-rule', initialize: () => ({}), onTick(state, context) {
-      if (context.tick !== 1) return state;
+    const lifecycle = { id: 'late-failure-rule', initialize: () => ({}), onTick(state, self) {
+      if (state.tick !== 1) return state;
       assert.ok(state.battlefield.units.size > observedSnapshot.units.length);
       assert.ok(state.mechanisms.has(1));
       assert.deepEqual(observedRuntime.snapshot(), observedSnapshot);
@@ -1154,7 +1154,7 @@ test('core battle propagates nested settlement errors without publishing battlef
 
   const effect = {
     id: 'nested-failure-effect', initialize: () => ({}),
-    onInstall: (state, context) => {
+    onInstall: (state) => {
       state = dealDamage(state, { source: { id: 0 }, target: { id: 1 }, parameters: parameters(7, 'TRUE') }).state;
       assert.equal(getUnit(state, 1).vitality.hp, 93);
       assert.equal(getUnit(state, 2).definition.id, 'nested-created');

@@ -1,3 +1,4 @@
+import { ref as effectRef } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { actionDefinition, battle, unit } from "../helpers/action-fixture.js";
@@ -28,8 +29,8 @@ function releaseEffect(id, data, invoke) {
     const definition = {
         id,
         initialize: () => data,
-        onInstall(state, context) {
-            const ref = context.ref;
+        onInstall(state, self) {
+            const ref = effectRef(self);
             return transitionUnit(state, ref.host.id, (current) => ({
                 ...current,
                 action: setBeforeReleaseHook(current.action, {
@@ -40,10 +41,10 @@ function releaseEffect(id, data, invoke) {
                 }),
             }));
         },
-        onEnd: (state, context) =>
-            transitionUnit(state, context.ref.host.id, (current) => ({
+        onEnd: (state, self) =>
+            transitionUnit(state, self.host.id, (current) => ({
                 ...current,
-                action: removeBeforeReleaseHook(current.action, `release/${context.ref.id}`),
+                action: removeBeforeReleaseHook(current.action, `release/${self.id}`),
             })),
     };
     return definition;
