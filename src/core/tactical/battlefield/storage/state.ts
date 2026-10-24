@@ -112,24 +112,3 @@ export function maintain<U extends Unit>(
               ),
     );
 }
-
-export function maintainFully<U extends Unit>(
-    previous: FieldState<U>,
-    content: BattlefieldContent<U>,
-): FieldState<U> {
-    const map = previous.map;
-
-    if (content.supportRelations !== previous.supportRelations) {
-        validateSupportRelations(content.units, content.supportRelations);
-    }
-
-    const supportRelations = reconcileSupportRelations(content.units, content.supportRelations);
-    const spatial = projectBattlefieldSpatial(map, content.units);
-
-    return finishSettlement(
-        previous,
-        { ...content, supportRelations },
-        spatial,
-        project(content.units.values()),
-    );
-}

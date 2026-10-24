@@ -15,8 +15,9 @@ import { createBattlefieldMap, BattlefieldMap } from '../../dist/core/tactical/b
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { create as projectStaticNavigationMap } from '../../dist/core/tactical/battlefield/map/navigation.js';
 import {
-  createBattlefieldState, maintain, maintainFully,
+  createBattlefieldState, maintain,
 } from '../../dist/core/tactical/battlefield/storage/state.js';
+import { maintainFully } from '../helpers/battlefield-projection.js';
 import { createMechanismDefinition, createMechanism } from '../../dist/core/tactical/battlefield/mechanism.js';
 import { Map as NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
 import { apply, create as createOverlay } from '../../dist/core/tactical/battlefield/navigation/overlay.js';

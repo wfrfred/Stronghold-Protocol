@@ -6,8 +6,9 @@ import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { create as createMap } from '../../dist/core/tactical/battlefield/map/navigation.js';
 import { create as createNavigation } from '../../dist/core/tactical/battlefield/navigation/state.js';
 import {
-  createBattlefieldState, maintain, maintainFully,
+  createBattlefieldState, maintain,
 } from '../../dist/core/tactical/battlefield/storage/state.js';
+import { maintainFully } from '../helpers/battlefield-projection.js';
 import { initialize } from "../helpers/unit.js";
 import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
 
