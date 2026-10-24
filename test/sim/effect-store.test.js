@@ -103,10 +103,10 @@ test("Effect Store restores precise reads only for the matching host and Definit
 
 test("Effect lifetime indexes follow Store versions without rebuilding unchanged containers", () => {
     const definition = { id: "scoped", initialize: () => ({ count: 1 }) };
-    const first = { ...instance(0, definition), scopes: [{ type: "UNIT", unitId: 3 }] };
+    const first = { ...instance(0, definition), scopes: [{ type: "UNIT", ref: { id: 3 } }] };
     const host = { id: 0, effects: Effects.empty().add(first) };
     const original = project([host]);
-    const changedEffect = { ...first, scopes: [{ type: "UNIT", unitId: 4 }] };
+    const changedEffect = { ...first, scopes: [{ type: "UNIT", ref: { id: 4 } }] };
     const changedHost = {
         ...host,
         effects: host.effects.replace(ref(first), changedEffect),
@@ -116,9 +116,9 @@ test("Effect lifetime indexes follow Store versions without rebuilding unchanged
     const closed = derive(updated, [{ previousUnit: changedHost, nextUnit: closedHost }]);
 
     assert.strictEqual(derive(original, [{ previousUnit: host, nextUnit: { ...host } }]), original);
-    assert.deepEqual(dependents(original, { type: "UNIT", unitId: 3 }), [ref(first)]);
-    assert.deepEqual(dependents(updated, { type: "UNIT", unitId: 3 }), []);
-    assert.deepEqual(dependents(updated, { type: "UNIT", unitId: 4 }), [ref(first)]);
-    assert.deepEqual(dependents(closed, { type: "UNIT", unitId: 4 }), []);
-    assert.deepEqual(dependents(updated, { type: "UNIT", unitId: 4 }), [ref(first)]);
+    assert.deepEqual(dependents(original, { type: "UNIT", ref: { id: 3 } }), [ref(first)]);
+    assert.deepEqual(dependents(updated, { type: "UNIT", ref: { id: 3 } }), []);
+    assert.deepEqual(dependents(updated, { type: "UNIT", ref: { id: 4 } }), [ref(first)]);
+    assert.deepEqual(dependents(closed, { type: "UNIT", ref: { id: 4 } }), []);
+    assert.deepEqual(dependents(updated, { type: "UNIT", ref: { id: 4 } }), [ref(first)]);
 });

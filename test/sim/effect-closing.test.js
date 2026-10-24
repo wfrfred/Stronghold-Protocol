@@ -77,12 +77,12 @@ test("effect lifetimes: provenance does not imply dependence on the source Unit"
     let bound;
     ({ state: battle, value: bound } = install(battle, definition("aura-child"), 1, {
         source: 0,
-        scopes: [{ type: "UNIT", unitId: 0 }],
+        scopes: [{ type: "UNIT", ref: { id: 0 } }],
     }));
-    battle = closeLifetime(battle, { type: "UNIT", unitId: 0 }, "RETREAT");
+    battle = closeLifetime(battle, { type: "UNIT", ref: unitRef(getUnit(battle, 0)) }, "RETREAT");
     assert.ok(get(battle, independent));
     assert.equal(get(battle, bound), undefined);
-    battle = closeLifetime(battle, { type: "UNIT", unitId: 1 }, "DEATH");
+    battle = closeLifetime(battle, { type: "UNIT", ref: unitRef(getUnit(battle, 1)) }, "DEATH");
     assert.equal(get(battle, independent), undefined);
 });
 
@@ -112,7 +112,7 @@ test("effect lifetimes: a closing host rejects a new dependent before its instal
     );
     let battle = effectFixtureWork(unit(0));
     battle = install(battle, parent).state;
-    battle = closeLifetime(battle, { type: "UNIT", unitId: 0 }, "DEATH");
+    battle = closeLifetime(battle, { type: "UNIT", ref: unitRef(getUnit(battle, 0)) }, "DEATH");
     assert.equal(installed, undefined);
     assert.equal(attempts, 0);
 });
@@ -231,7 +231,7 @@ test("effect lifetimes: closing a host never reenables its suppressed effects", 
     battle = install(battle, strong).state;
     enabled.length = 0;
 
-    battle = closeLifetime(battle, { type: "UNIT", unitId: 0 }, "RETREAT");
+    battle = closeLifetime(battle, { type: "UNIT", ref: unitRef(getUnit(battle, 0)) }, "RETREAT");
 
     assert.deepEqual(enabled, []);
     assert.deepEqual(getUnit(battle, 0).effects.values().toArray(), []);

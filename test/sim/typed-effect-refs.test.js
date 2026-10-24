@@ -83,7 +83,7 @@ import type { Unit } from ${source("tactical/unit/unit")};
 import * as units from ${source("tactical/unit/query")};
 import type { Vitality } from ${source("tactical/unit/capability/vitality/capability")};
 import type { Locomotion } from ${source("tactical/unit/capability/locomotion/capability")};
-import type { Effect, View } from ${source("tactical/unit/effect/effect")};
+import type { Effect, View, Lifetime } from ${source("tactical/unit/effect/effect")};
 import { ref } from ${source("tactical/unit/effect/effect")};
 import type { Definition } from ${source("tactical/unit/effect/definition")};
 import * as effects from ${source("tactical/unit/effect/operations")};
@@ -104,6 +104,13 @@ const identity: Identity<Effect<{ charges: number }, Vitality>> = {
 };
 const owner: Ref<Unit & Vitality> = retained.host;
 const weakerOwner: Ref<Unit> = owner;
+const unitLifetime: Lifetime = { type: "UNIT", ref: host };
+effects.bindLifetime(battle, retained, unitLifetime);
+// @ts-expect-error Unit lifetimes require a typed reference rather than a bare Unit ID.
+const bareUnitLifetime: Lifetime = { type: "UNIT", unitId: host.id };
+// @ts-expect-error an untyped ID address does not prove a Unit reference.
+const untypedUnitLifetime: Lifetime = { type: "UNIT", ref: { id: host.id } };
+
 function relay(reference: Ref<Effect<{ charges: number }, Vitality>>) {
     return effects.get(battle, reference);
 }

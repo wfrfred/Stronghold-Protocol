@@ -21,7 +21,7 @@ function fixture(callbacks = {}) {
         },
     });
     const installOwned = (battle, self, expected = true) => {
-        for (const extra of [[], [{ type: "UNIT", unitId: 1 }]]) {
+        for (const extra of [[], [{ type: "UNIT", ref: unitRef(getUnit(battle, 1)) }]]) {
             const installed = effects.install(battle, unitRef(getUnit(battle, 1)), owned, {
                 source: self.host.id,
                 scopes: [{ type: "SKILL", ref: activationRef(self) }, ...extra],

@@ -145,7 +145,7 @@ test("skill finish sees LEAVING and cannot install dependencies on its departing
       onEnd(state) {
         statuses.push(getUnit(state, 0).lifecycle);
         state = leave(state, 0, "DEATH");
-        const rejected = effects.install(state, unitRef(getUnit(state, 1)), { id: "late-dependency", initialize: () => ({}), onInstall(state) { installations++; return state; } }, { scopes: [{ type: "UNIT", unitId: 0 }] });
+        const rejected = effects.install(state, unitRef(getUnit(state, 1)), { id: "late-dependency", initialize: () => ({}), onInstall(state) { installations++; return state; } }, { scopes: [{ type: "UNIT", ref: { id: 0 } }] });
         assert.equal(rejected.value, undefined);
         return rejected.state;
       },

@@ -9,7 +9,7 @@ import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 export type Id = number;
 
 export type Lifetime =
-    | { readonly type: "UNIT"; readonly unitId: UnitId }
+    | { readonly type: "UNIT"; readonly ref: Ref<Unit> }
     | { readonly type: "ACTION"; readonly ref: Ref<ActionView> }
     | { readonly type: "SKILL"; readonly ref: Ref<SkillActivation> }
     | { readonly type: "ELEMENTAL_BURST"; readonly ref: Ref<Burst> }
@@ -74,7 +74,7 @@ export function setDeadline<S extends object, H extends object>(
 export function key(scope: Scope): string {
     switch (scope.type) {
         case "UNIT":
-            return `UNIT:${scope.unitId}`;
+            return `UNIT:${scope.ref.id}`;
 
         case "ACTION":
             return `ACTION:${scope.ref.host.id}:${scope.ref.id}`;

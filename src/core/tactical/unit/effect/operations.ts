@@ -54,7 +54,7 @@ export function install<S extends object, H extends object>(
 
     if (
         unit === undefined ||
-        !available(battle, { type: "UNIT", unitId: host.id }) ||
+        !available(battle, { type: "UNIT", ref: host }) ||
         scopes.some((scope) => scope.type !== "TICK" && !available(battle, scope))
     ) {
         return { state: battle, value: undefined };
@@ -199,7 +199,7 @@ export function endDependents(
 
     if (lifetime.type === "UNIT") {
         const hosted =
-            getUnit(battle, lifetime.unitId)?.effects.values().map(effectRef).toArray() ?? [];
+            units.get(battle, lifetime.ref)?.effects.values().map(effectRef).toArray() ?? [];
 
         for (const ref of hosted) {
             battle = end(battle, ref, reason);
@@ -280,7 +280,7 @@ function available(battle: BattleState, lifetime: Lifetime): boolean {
     }
     switch (lifetime.type) {
         case "UNIT":
-            return getUnit(battle, lifetime.unitId)?.lifecycle === "PRESENT";
+            return units.get(battle, lifetime.ref)?.lifecycle === "PRESENT";
 
         case "ACTION": {
             const unit = getUnit(battle, lifetime.ref.host.id);
@@ -335,7 +335,7 @@ function shouldBeActive(battle: BattleState, instance: View, unit: Unit): boolea
     if (
         !instance.enabled ||
         instance.status === "ENDING" ||
-        !available(battle, { type: "UNIT", unitId: unit.id }) ||
+        !available(battle, { type: "UNIT", ref: units.ref(unit) }) ||
         instance.scopes.some((scope) => scope.type !== "TICK" && !available(battle, scope))
     ) {
         return false;

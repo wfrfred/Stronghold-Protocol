@@ -30,7 +30,7 @@ test("effect values: local no-ops and replacements retain the input version", ()
 });
 
 test("effect values: deadline updates preserve lifetime constraints and reject invalid time", () => {
-    const lifetime = { type: "UNIT", unitId: 0 };
+    const lifetime = { type: "UNIT", ref: { id: 0 } };
     const { state, value: ref } = install(effectFixtureWork(host()), definition("deadline"), 0, {
         scopes: [lifetime, { type: "TICK", tick: 3 }],
     });

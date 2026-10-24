@@ -52,13 +52,13 @@ export function leave(
     unitId: Id,
     reason: BattlefieldRemovalReason,
 ): BattleState {
-    const lifetime = { type: "UNIT" as const, unitId };
     const unit = getUnit(state, unitId);
 
     if (unit === undefined || unit.lifecycle === "LEAVING") {
         return state;
     }
 
+    const lifetime = { type: "UNIT" as const, ref: units.ref(unit) };
     state = updateUnit(state, { ...unit, lifecycle: "LEAVING" });
     const leaving = getUnit(state, unitId);
 

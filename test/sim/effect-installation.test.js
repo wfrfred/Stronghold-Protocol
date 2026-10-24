@@ -161,7 +161,7 @@ test("effect installation: closing the host from a nested installation never ena
         {},
         {
             onInstall(state, context) {
-                return closeLifetime(state, { type: "UNIT", unitId: 0 }, "RETREAT");
+                return closeLifetime(state, { type: "UNIT", ref: unitRef(context.unit) }, "RETREAT");
             },
         },
     );

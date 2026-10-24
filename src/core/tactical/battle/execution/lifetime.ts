@@ -8,7 +8,7 @@ export function closeLifetime(
     reason = "SCOPE_CLOSED",
 ): BattleState {
     if (lifetime.type === "UNIT") {
-        state = transitionUnit(state, lifetime.unitId, (unit) =>
+        state = transitionUnit(state, lifetime.ref.id, (unit) =>
             unit.lifecycle === "LEAVING" ? unit : { ...unit, lifecycle: "LEAVING" },
         );
     } else {

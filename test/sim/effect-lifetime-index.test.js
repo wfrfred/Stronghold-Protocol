@@ -42,14 +42,14 @@ test("binding rejects scope cycles while sharing independent scopes", () => {
     let second;
     ({ state: battle, value: second } = install(battle, content, 2, { scopes: [{ type: "EFFECT", ref: first }] }));
     assert.throws(() => effects.bindLifetime(battle, first, { type: "EFFECT", ref: second }), /cycle/);
-    const bound = effects.bindLifetime(battle, second, { type: "UNIT", unitId: 1 });
+    const bound = effects.bindLifetime(battle, second, { type: "UNIT", ref: { id: 1 } });
     battle = bound.state;
     assert.equal(bound.value, true);
     assert.deepEqual(
-        dependents(battlefieldView(battle).effectLifetimes, { type: "UNIT", unitId: 1 }),
+        dependents(battlefieldView(battle).effectLifetimes, { type: "UNIT", ref: { id: 1 } }),
         [second],
     );
-    battle = closeLifetime(battle, { type: "UNIT", unitId: 1 });
+    battle = closeLifetime(battle, { type: "UNIT", ref: { id: 1 } });
     assert.deepEqual(getUnit(battle, 1).effects.values().toArray(), []);
     assert.deepEqual(getUnit(battle, 2).effects.values().toArray(), []);
 });

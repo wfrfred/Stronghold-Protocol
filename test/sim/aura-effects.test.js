@@ -66,7 +66,7 @@ test("host lifetime closes remote children only when explicitly bound", () => {
         let ref;
         ({ state: battle, value: ref } = install(battle, aura, 0));
         const child = get(battle, ref).data.bindings[0].refs[0];
-        battle = closeLifetime(battle, { type: "UNIT", unitId: 0 }, "RETREAT");
+        battle = closeLifetime(battle, { type: "UNIT", ref: unitRef(getUnit(battle, 0)) }, "RETREAT");
         assert.equal(get(battle, ref), undefined);
         assert.equal(get(battle, child) === undefined, bindLifetime);
         assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), bindLifetime ? 100 : 120);
