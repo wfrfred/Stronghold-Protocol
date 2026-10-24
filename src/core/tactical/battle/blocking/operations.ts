@@ -79,6 +79,25 @@ function canRetain(
     );
 }
 
+function canAcquire(
+    battle: BattleState,
+    blocker: Unit & Blocker,
+    target: Unit & Blockable,
+): boolean {
+    if (!canRetain(battle, blocker, target)) {
+        return false;
+    }
+
+    const distance = World.distanceSquared(blocker.position, target.position);
+    const radius = blocker.blocker.geometry.radius;
+    const capacity = resolveCapacity(blocker.definition.blocker, blocker.blocker);
+    const volume = resolveVolume(target.definition.blockable, target.blockable);
+
+    return (
+        distance <= radius * radius && usedCapacity(battle, units.ref(blocker)) + volume <= capacity
+    );
+}
+
 export function synchronize(
     battle: BattleState,
     previousUnit: Unit,
@@ -100,6 +119,10 @@ export function synchronize(
 
         if (owner === undefined) {
             throw new RangeError(`unknown blocker: ${next.id}`);
+        }
+
+        if (!canAcquire(battle, owner, nextUnit)) {
+            throw new RangeError("blocking ownership requires acquisition eligibility");
         }
 
         const target = units.ref(nextUnit);
@@ -231,17 +254,8 @@ function tryAcquire(
     if (
         blocker === undefined ||
         target?.blockable.blocker !== null ||
-        !canRetain(battle, blocker, target)
+        !canAcquire(battle, blocker, target)
     ) {
-        return battle;
-    }
-
-    const distance = World.distanceSquared(blocker.position, target.position);
-    const radius = blocker.blocker.geometry.radius;
-    const capacity = resolveCapacity(blocker.definition.blocker, blocker.blocker);
-    const volume = resolveVolume(target.definition.blockable, target.blockable);
-
-    if (distance > radius * radius || usedCapacity(battle, blockerRef) + volume > capacity) {
         return battle;
     }
 

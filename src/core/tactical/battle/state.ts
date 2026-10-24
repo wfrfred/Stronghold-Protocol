@@ -131,7 +131,7 @@ export function updateUnit<U extends Unit>(state: State, unit: U): State {
     const previous = getUnit(state, unit.id);
 
     if (previous === undefined) {
-        return blocking.maintain(state);
+        return state;
     }
 
     state = setBattlefield(state, battlefield.replaceUnit(state.battlefield, unit));

@@ -226,9 +226,14 @@ test("blocking volume: independent Effect contributions release targets and clea
 test("blocking volume: integer additions honor exclusive groups and restore the remaining candidate", () => {
     const h = battlefield([blocker(4), enemy(1), enemy(2)]);
     const original = h.state.units.get(1);
-    const replace = (blockableState) => h.commit(state => ({ ...state, units: new Map([...state.units, ...[{
-        ...h.state.units.get(1), blockable: blockableState,
-    }].map(unit => [unit.id, unit])]) }));
+    const replace = (blockableState) => {
+        const battle = h.work();
+        const unit = getUnit(battle, 1);
+        h.publish(updateUnit(battle, {
+            ...unit,
+            blockable: { ...unit.blockable, volume: blockableState.volume },
+        }));
+    };
     let state = setVolumeContribution(original.blockable, { id: "independent", value: 1 });
     state = setVolumeContribution(state, {
         id: "lower", value: 1, group: { id: "size", priority: 1 },
