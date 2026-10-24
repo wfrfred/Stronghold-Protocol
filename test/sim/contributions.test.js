@@ -1,3 +1,4 @@
+import { resolveDefense } from "../../dist/core/tactical/unit/capability/vitality/query.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { effectFixtureWork as workFor } from "../helpers/effects.js";
 import assert from "node:assert/strict";
@@ -13,10 +14,8 @@ import {
 import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import {
     setResistanceContribution,
-    resolveDefense,
 } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import {
-    battlefieldView,
     createBattleState,
     getUnit,
     registerUnit,
@@ -99,11 +98,11 @@ test("contributions: winners alone evaluate and effective modifiers follow ID or
     assert.equal(selected[0], entries[2].value);
     assert.equal(selected[1], entries[0].value);
     assert.deepEqual(
-        selected.flatMap((input) => modifier.evaluate(input, context)),
+        selected.flatMap((input) => typeof input === "function" ? input(context) : input),
         [value(3), value(7)],
     );
     assert.deepEqual(calls, [context]);
-    assert.equal(modifier.evaluate(entries[2].value, context), entries[2].value);
+    assert.equal(selected[0], entries[2].value);
 });
 
 test("contributions: selection preserves domain payloads without interpreting or flattening them", () => {
@@ -179,8 +178,8 @@ test("contributions: sampled and dynamic defense values resolve without mutating
             const modifiers = [value(amount)];
             const entry = { id: "resistance", value: dynamic ? () => modifiers : modifiers };
             const current = ({ ...base, vitality: setResistanceContribution(base.vitality, entry) });
-            const view = battlefieldView(workFor(current));
-            assert.deepEqual(resolveDefense(current.vitality, current.definition.vitality, { unit: current, battlefield: view }), { defense: 200, resistance: expected });
+            const battle = workFor(current);
+            assert.deepEqual(resolveDefense(battle, unitRef(current)), { defense: 200, resistance: expected });
             assert.equal(current.vitality.resistance[0], entry);
             assert.equal(base.definition.vitality.resistance, 30);
         }

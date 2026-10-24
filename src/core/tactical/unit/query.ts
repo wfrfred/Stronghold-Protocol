@@ -1,13 +1,7 @@
-import type { BattlefieldView } from "../battlefield/contract.js";
 import type { State as BattleState } from "../battle/state.js";
 import type { Unit } from "./unit.js";
 import type { Ref } from "../../common/ref.js";
 import { create, type Query } from "../../common/query.js";
-
-export interface Context {
-    readonly unit: Unit;
-    readonly battlefield: BattlefieldView;
-}
 
 export function ref<U extends Unit>(unit: U): Ref<U> {
     return { id: unit.id } as Ref<U>;

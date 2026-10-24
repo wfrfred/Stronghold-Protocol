@@ -1,4 +1,3 @@
-import type { Context } from "../../query.js";
 import type { State as BattleState, Result } from "../../../battle/state.js";
 import type { Unit, Definition as UnitDefinition } from "../../unit.js";
 import type { Id as DefinitionId } from "../../action/definition.js";
@@ -26,11 +25,15 @@ export interface Rule {
     ) => boolean;
 }
 
+export type Input =
+    | readonly attribute.Modifier[]
+    | ((battle: BattleState, self: Unit & Action) => readonly attribute.Modifier[]);
+
 export interface State {
     readonly states: States;
     readonly instances: Actions;
-    readonly interval: readonly contribution.Contribution<attribute.Input<Context>>[];
-    readonly speed: readonly contribution.Contribution<attribute.Input<Context>>[];
+    readonly interval: readonly contribution.Contribution<Input>[];
+    readonly speed: readonly contribution.Contribution<Input>[];
     readonly rules: readonly Rule[];
     readonly beforeRelease: readonly ReleaseHook[];
     readonly released: readonly ReleasedHook[];
@@ -135,7 +138,7 @@ function updateContributions(
 
 export function setIntervalContribution(
     state: State,
-    entry: contribution.Contribution<attribute.Input<Context>>,
+    entry: contribution.Contribution<Input>,
 ): State {
     return updateContributions(state, "interval", (entries) => contribution.set(entries, entry));
 }
@@ -144,10 +147,7 @@ export function removeIntervalContribution(state: State, id: string): State {
     return updateContributions(state, "interval", (entries) => contribution.remove(entries, id));
 }
 
-export function setSpeedContribution(
-    state: State,
-    entry: contribution.Contribution<attribute.Input<Context>>,
-): State {
+export function setSpeedContribution(state: State, entry: contribution.Contribution<Input>): State {
     return updateContributions(state, "speed", (entries) => contribution.set(entries, entry));
 }
 

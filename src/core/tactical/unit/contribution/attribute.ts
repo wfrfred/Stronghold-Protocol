@@ -7,8 +7,6 @@ export interface Modifier {
     readonly finalScaler: number;
 }
 
-export type Input<C> = readonly Modifier[] | ((context: C) => readonly Modifier[]);
-
 export function create(input: Partial<Modifier> = {}): Modifier {
     const { addition = 0, multiplier = 0, finalAddition = 0, finalScaler = 1 } = input;
     const normalized = { addition, multiplier, finalAddition, finalScaler };
@@ -18,10 +16,6 @@ export function create(input: Partial<Modifier> = {}): Modifier {
     }
 
     return Object.freeze(normalized);
-}
-
-export function evaluate<C>(input: Input<C>, context: C): readonly Modifier[] {
-    return typeof input === "function" ? input(context) : input;
 }
 
 export function apply(base: number, modifiers: Iterable<Modifier>): number {

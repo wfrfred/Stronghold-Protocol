@@ -1,17 +1,17 @@
+import { resolveDefense } from "../../dist/core/tactical/unit/capability/vitality/query.js";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialize } from "../helpers/unit.js";
 import {
-    battlefieldView,
     transitionUnit,
 } from "../../dist/core/tactical/battle/state.js";
 import {
     setAttackContribution,
     removeAttackContribution,
 } from "../../dist/core/tactical/unit/capability/offense/capability.js";
-import { setDefenseContribution, resolveDefense } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
+import { setDefenseContribution } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { create } from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { effectFixtureWork } from "../helpers/effects.js";
@@ -39,7 +39,7 @@ test("attribute selection keeps weaker candidates while independent attributes s
     const before = battle;
     assert.equal(resolveAttack(before, unitRef(getUnit(before, 1))), 160);
     const current = getUnit(before, 1);
-    assert.equal(resolveDefense(current.vitality, current.definition.vitality, { unit: current, battlefield: battlefieldView(before) }).defense, 30);
+    assert.equal(resolveDefense(before, unitRef(current)).defense, 30);
     battle = transitionUnit(battle, 1, (current) => ({ ...current, offense: removeAttackContribution(current.offense, "b") }));
     assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 400);
     assert.equal(resolveAttack(before, unitRef(getUnit(before, 1))), 160);

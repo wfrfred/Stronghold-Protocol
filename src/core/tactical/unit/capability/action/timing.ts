@@ -1,6 +1,6 @@
 import { assertFiniteNumber } from "../../../../common/assert.js";
 import type { Ref } from "../../../../common/ref.js";
-import { battlefieldView, type State as BattleState } from "../../../battle/state.js";
+import type { State as BattleState } from "../../../battle/state.js";
 import type { Unit } from "../../unit.js";
 import * as units from "../../query.js";
 import * as contribution from "../../contribution/contribution.js";
@@ -21,15 +21,13 @@ export function resolveSpeed(
         return undefined;
     }
 
-    const context = { unit, battlefield: battlefieldView(battle) };
-
     return Math.max(
         20,
         attribute.apply(
             definition.speed,
             contribution
                 .resolve(unit.action.speed)
-                .flatMap((value) => attribute.evaluate(value, context)),
+                .flatMap((input) => (typeof input === "function" ? input(battle, unit) : input)),
         ),
     );
 }
@@ -45,15 +43,13 @@ export function resolveBaseInterval(
         return undefined;
     }
 
-    const context = { unit, battlefield: battlefieldView(battle) };
-
     return Math.max(
         0,
         attribute.apply(
             definition.intervalTicks,
             contribution
                 .resolve(unit.action.interval)
-                .flatMap((value) => attribute.evaluate(value, context)),
+                .flatMap((input) => (typeof input === "function" ? input(battle, unit) : input)),
         ),
     );
 }

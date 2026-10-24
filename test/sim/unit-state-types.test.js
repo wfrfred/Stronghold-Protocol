@@ -20,13 +20,16 @@ import { initialize } from ${module("unit/initialize")};
 import type { Unit } from ${module("unit/unit")};
 import type { Ref } from ${module("../common/ref")};
 import type { State as BattleState } from ${module("battle/state")};
-import type { Vitality } from ${module("unit/capability/vitality/capability")};
-import { setMaxHpContribution } from ${module("unit/capability/vitality/capability")};
+import type { BattlefieldView } from ${module("battlefield/contract")};
+import type { Vitality, Input as VitalityInput } from ${module("unit/capability/vitality/capability")};
+import { resolveDefense } from ${module("unit/capability/vitality/query")};
+import { setDefenseContribution, setMaxHpContribution } from ${module("unit/capability/vitality/capability")};
 import { setAttackContribution, type Input as AttackInput, type Offense } from ${module("unit/capability/offense/capability")};
 import { setCapacityContribution, canBlock, setHook as setBlockerHook, type Rule as BlockerRule, type Blocker } from ${module("unit/capability/blocking/blocker")};
 import { setVolumeContribution, canBeBlocked, setHook as setBlockableHook, type Rule as BlockableRule, type Blockable } from ${module("unit/capability/blocking/blockable")};
 import { blockerOf, blocked, usedCapacity } from ${module("battle/blocking/query")};
-import type { Locomotion } from ${module("unit/capability/locomotion/capability")};
+import type { Locomotion, Input as MovementInput } from ${module("unit/capability/locomotion/capability")};
+import { setSpeedContribution as setActionSpeedContribution, type Action, type Input as ActionInput } from ${module("unit/capability/action/capability")};
 import { setSpeedContribution } from ${module("unit/capability/locomotion/operations")};
 import type { Route, Progress } from ${module("unit/capability/route/capability")};
 import type { Context, Definition } from ${module("unit/effect/definition")};
@@ -34,8 +37,8 @@ import { install, update, get } from ${module("unit/effect/operations")};
 import type { Effect } from ${module("unit/effect/effect")};
 import { Effects } from ${module("unit/effect/effects")};
 import type { Contribution } from ${module("unit/contribution/contribution")};
-import type { Modifier, Input } from ${module("unit/contribution/attribute")};
-import { ref as unitRef, type Context as QueryContext } from ${module("unit/query")};
+import type { Modifier } from ${module("unit/contribution/attribute")};
+import { ref as unitRef } from ${module("unit/query")};
 const host=initialize(battle, {id:1,position:[0,0],definition:{id:'host',vitality: { maxHp: 100, defense: 0, resistance: 0 }}}).value;
 const content: Definition<{charges:number},Vitality> = {
  id:'shield',initialize:()=>({charges:2}),
@@ -101,7 +104,7 @@ for(const stored of mixed.values()){
 }
 // @ts-expect-error an ID alone cannot claim a private data type.
 host.effects.get<{charges:number},Vitality>(0);
-declare const capabilityHost:Unit & Vitality & Offense & Blocker & Blockable & Locomotion & Route;
+declare const capabilityHost:Unit & Vitality & Offense & Blocker & Blockable & Locomotion & Route & Action;
 const blockerRule:BlockerRule={id:'blocker',allows:self=>self.blocker.capacity.length===0};
 const blockableRule:BlockableRule={id:'blockable',allows:self=>self.blockable.volume.length===0};
 canBlock(capabilityHost);
@@ -141,7 +144,41 @@ capabilityHost.blocker.enabled;
 // @ts-expect-error eligibility is expressed through Rules.
 capabilityHost.blockable.enabled;
 const fixed:Contribution<readonly Modifier[]>={id:'fixed',value:[]};
-const dynamic:Contribution<Input<QueryContext>>={id:'dynamic',value:()=>[]};
+const dynamic:Contribution<MovementInput>={id:'dynamic',value:(current,self)=>{
+ const state:BattleState=current;
+ const speed:number=self.definition.locomotion.speed;
+ const velocity:readonly [number,number]=self.locomotion.velocity;
+ // @ts-expect-error movement input does not prove another capability.
+ self.vitality.hp;
+ return [];
+}};
+const defenseInput:Contribution<VitalityInput>={id:'defense',value:(current,self)=>{
+ const state:BattleState=current;
+ const hp:number=self.vitality.hp;
+ const base:number=self.definition.vitality.defense;
+ // @ts-expect-error defense input does not prove another capability.
+ self.locomotion.velocity;
+ return [];
+}};
+const actionInput:Contribution<ActionInput>={id:'action',value:(current,self)=>{
+ const state:BattleState=current;
+ const count:number=self.action.speed.length;
+ self.definition.action.definitions.values();
+ // @ts-expect-error action input does not prove another capability.
+ self.skill.active;
+ return [];
+}};
+setActionSpeedContribution(capabilityHost.action,actionInput);
+setDefenseContribution(capabilityHost.vitality,defenseInput);
+const resolvedDefense:number|undefined=resolveDefense(battle,unitRef(capabilityHost))?.defense;
+// @ts-expect-error defense queries require a Vitality identity.
+resolveDefense(battle,unitRef(bare));
+// @ts-expect-error movement inputs receive BattleState and self instead of a Context wrapper.
+const legacyMovement:MovementInput=({unit,battlefield}:{unit:Unit & Locomotion;battlefield:BattlefieldView})=>[];
+// @ts-expect-error defense inputs receive BattleState and self instead of a Context wrapper.
+const legacyDefense:VitalityInput=({unit,battlefield}:{unit:Unit & Vitality;battlefield:BattlefieldView})=>[];
+// @ts-expect-error action inputs receive BattleState and self instead of a Context wrapper.
+const legacyAction:ActionInput=({unit,battlefield}:{unit:Unit & Action;battlefield:BattlefieldView})=>[];
 setVolumeContribution(capabilityHost.blockable,{id:'volume',value:1});
 // @ts-expect-error blocking volume requires settled static values.
 setVolumeContribution(capabilityHost.blockable,dynamic);

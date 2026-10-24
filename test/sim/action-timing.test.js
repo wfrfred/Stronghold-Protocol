@@ -201,7 +201,7 @@ test("action timing: live contributions read the battle version provided by the 
         ...current,
         action: setSpeedContribution(current.action, {
             id: "live",
-            value: ({ unit }) => [modifier({ addition: unit.vitality.hp })],
+            value: (_battle, self) => [modifier({ addition: self.vitality.hp })],
         }),
     });
     const next = updateUnit(installed, {

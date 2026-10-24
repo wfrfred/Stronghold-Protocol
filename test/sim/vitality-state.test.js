@@ -1,9 +1,10 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
+import { resolveDefense } from "../../dist/core/tactical/unit/capability/vitality/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
     initialize,
     resolveMaxHp,
-    resolveDefense,
     setMaxHpContribution,
     removeMaxHpContribution,
     setDefenseContribution,
@@ -11,7 +12,7 @@ import {
 } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { initializers } from "../../dist/core/tactical/unit/capability/catalog.js";
 import { create } from "../../dist/core/tactical/unit/contribution/attribute.js";
-import { battlefieldView, getUnit, transitionUnit } from "../../dist/core/tactical/battle/state.js";
+import { getUnit, transitionUnit } from "../../dist/core/tactical/battle/state.js";
 import { fixtureBattle, initialize as initializeUnit } from "../helpers/unit.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 
@@ -83,10 +84,10 @@ test("dynamic DEF and RES contributions use current Unit and battlefield facts w
         ...target,
         vitality: setResistanceContribution(setDefenseContribution(target.vitality, {
             id: "conditional-defense",
-            value: ({ unit }) => [create({ finalAddition: unit.vitality.hp < 50 ? -100 : 5.25 })],
+            value: (_battle, self) => [create({ finalAddition: self.vitality.hp < 50 ? -100 : 5.25 })],
         }), {
             id: "source-resistance",
-            value: ({ battlefield }) => [create({ finalAddition: battlefield.getUnit(2).vitality.hp })],
+            value: battle => [create({ finalAddition: getUnit(battle, 2).vitality.hp })],
         }),
     };
     const initial = effectFixtureWork(modified, source);
@@ -95,7 +96,7 @@ test("dynamic DEF and RES contributions use current Unit and battlefield facts w
     })), 2, unit => ({ ...unit, vitality: { ...unit.vitality, hp: 20.5 } }));
     const resolve = battle => {
         const unit = getUnit(battle, 1);
-        return resolveDefense(unit.vitality, unit.definition.vitality, { unit, battlefield: battlefieldView(battle) });
+        return resolveDefense(battle, unitRef(unit));
     };
     assert.deepEqual(resolve(initial), { defense: 25.75, resistance: 100 });
     assert.deepEqual(resolve(current), { defense: 0, resistance: 30.75 });

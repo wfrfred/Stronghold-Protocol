@@ -8,7 +8,6 @@ import { contributionEffect, refreshContribution } from "../helpers/effects.js";
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import {
-    battlefieldView,
     getUnit,
     registerUnit,
     updateUnit,
@@ -159,9 +158,9 @@ test("move speed: live contributions read latest battle and unit facts", () => {
     const program = contributionEffect("live-move", {}, {
         capability: "locomotion", set: setSpeedContribution,
         remove: removeSpeedContribution, dynamic: true,
-        value: (_, { unit, battlefield }) => {
-            assert.equal(battlefield.getUnit(unit.id).vitality.hp, unit.vitality.hp);
-            return [modifier.create({ finalScaler: unit.vitality.hp / 100 })];
+        value: (_, battle, self) => {
+            assert.equal(getUnit(battle, self.id), self);
+            return [modifier.create({ finalScaler: self.vitality.hp / 100 })];
         },
     });
     const h = harness({ speed: 0.5 });

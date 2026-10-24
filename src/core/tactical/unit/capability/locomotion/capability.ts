@@ -2,7 +2,6 @@ import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import type { State as BattleState, Result } from "../../../battle/state.js";
 import type { MotionMode } from "../../../battlefield/navigation/state.js";
 import { createWorldPosition, type WorldPosition } from "../../../geometry/coordinate.js";
-import type { Context } from "../../query.js";
 import type { Unit } from "../../unit.js";
 import type { Contribution } from "../../contribution/contribution.js";
 import type * as attribute from "../../contribution/attribute.js";
@@ -21,9 +20,13 @@ export interface Rule {
     readonly allows: (battle: BattleState, self: Unit & Locomotion) => boolean;
 }
 
+export type Input =
+    | readonly attribute.Modifier[]
+    | ((battle: BattleState, self: Unit & Locomotion) => readonly attribute.Modifier[]);
+
 export interface State {
     readonly velocity: WorldPosition;
-    readonly speed: readonly Contribution<attribute.Input<Context>>[];
+    readonly speed: readonly Contribution<Input>[];
     readonly rules: readonly Rule[];
 }
 

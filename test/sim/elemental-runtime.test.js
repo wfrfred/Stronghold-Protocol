@@ -1,3 +1,4 @@
+import { resolveDefense } from "../../dist/core/tactical/unit/capability/vitality/query.js";
 import { distance } from "../../dist/core/tactical/battle/targeting/compare.js";
 import { elementDamage, elementHealing } from "../../dist/core/tactical/battle/targeting/filter.js";
 import { and, sameSide, range as inRange } from "../../dist/core/tactical/battle/targeting/filter.js";
@@ -12,7 +13,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
-import { battlefieldView, getUnit, transitionUnit } from '../../dist/core/tactical/battle/state.js';
+import { getUnit, transitionUnit } from '../../dist/core/tactical/battle/state.js';
 import { initialize, placement } from "../helpers/unit.js";
 import { create as createAttack, chooseTargets } from '../../dist/content/tactical/actions/attack.js';
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
@@ -23,7 +24,6 @@ import { definition as createSkillDefinition } from '../helpers/skill.js';
 import { activate as activateSkill, advance as advanceSkill } from '../../dist/core/tactical/unit/capability/skill/operations.js';
 import { recover } from '../../dist/core/tactical/unit/capability/skill/sp.js';
 import { setHook as setHealingHook } from '../../dist/core/tactical/battle/healing/hook.js';
-import { resolveDefense } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
 import { resolveAttack } from '../../dist/core/tactical/unit/capability/offense/query.js';
 import { create as modifier } from '../../dist/core/tactical/unit/contribution/attribute.js';
 import { healing } from '../helpers/vitality.js';
@@ -64,7 +64,7 @@ function advance(work, tick) {
 }
 function defense(work) {
   const unit = getUnit(work, 1);
-  return resolveDefense(unit.vitality, unit.definition.vitality, { unit, battlefield: battlefieldView(work) });
+  return resolveDefense(work, unitRef(unit));
 }
 function power(work) {
   return resolveAttack(work, unitRef(getUnit(work, 1)));

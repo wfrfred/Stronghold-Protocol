@@ -3,7 +3,6 @@ import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as attribute from "../../contribution/attribute.js";
 import type { Unit, Definition as UnitDefinition } from "../../unit.js";
-import type { Context } from "../../query.js";
 import type {
     Hook as DamageHook,
     ReceptionRule as DamageReceptionRule,
@@ -22,11 +21,15 @@ export interface DefenseValues {
     readonly resistance: number;
 }
 
+export type Input =
+    | readonly attribute.Modifier[]
+    | ((battle: BattleState, self: Unit & Vitality) => readonly attribute.Modifier[]);
+
 export interface State {
     readonly hp: number;
     readonly maxHp: readonly contribution.Contribution<readonly attribute.Modifier[]>[];
-    readonly defense: readonly contribution.Contribution<attribute.Input<Context>>[];
-    readonly resistance: readonly contribution.Contribution<attribute.Input<Context>>[];
+    readonly defense: readonly contribution.Contribution<Input>[];
+    readonly resistance: readonly contribution.Contribution<Input>[];
     readonly damageHooks: readonly DamageHook[];
     readonly healingHooks: readonly HealingHook[];
     readonly damageReceptionRules: readonly DamageReceptionRule[];
@@ -141,7 +144,7 @@ function updateContributions(
 
 export function setDefenseContribution(
     state: State,
-    entry: contribution.Contribution<attribute.Input<Context>>,
+    entry: contribution.Contribution<Input>,
 ): State {
     return updateContributions(state, "defense", (entries) => contribution.set(entries, entry));
 }
@@ -152,41 +155,11 @@ export function removeDefenseContribution(state: State, id: string): State {
 
 export function setResistanceContribution(
     state: State,
-    entry: contribution.Contribution<attribute.Input<Context>>,
+    entry: contribution.Contribution<Input>,
 ): State {
     return updateContributions(state, "resistance", (entries) => contribution.set(entries, entry));
 }
 
 export function removeResistanceContribution(state: State, id: string): State {
     return updateContributions(state, "resistance", (entries) => contribution.remove(entries, id));
-}
-
-export function resolveDefense(
-    state: State,
-    definition: Definition,
-    context: Context,
-): DefenseValues {
-    return {
-        defense: Math.max(
-            0,
-            attribute.apply(
-                definition.defense,
-                contribution
-                    .resolve(state.defense)
-                    .flatMap((value) => attribute.evaluate(value, context)),
-            ),
-        ),
-        resistance: Math.min(
-            100,
-            Math.max(
-                0,
-                attribute.apply(
-                    definition.resistance,
-                    contribution
-                        .resolve(state.resistance)
-                        .flatMap((value) => attribute.evaluate(value, context)),
-                ),
-            ),
-        ),
-    };
 }

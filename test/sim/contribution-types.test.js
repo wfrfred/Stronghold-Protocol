@@ -29,8 +29,10 @@ declare const modifiers: readonly Contribution<readonly attribute.Modifier[]>[];
 const selectedModifiers = resolve(modifiers);
 type Modifiers = Assert<Equal<typeof selectedModifiers, readonly (readonly attribute.Modifier[])[]>>;
 attribute.apply(100, selectedModifiers.flat());
-declare const inputs: readonly Contribution<attribute.Input<{ amount: number }>>[];
-attribute.apply(100, resolve(inputs).flatMap(input => attribute.evaluate(input, { amount: 2 })));
+declare const inputs: readonly Contribution<(amount: number) => number>[];
+const selectedInputs = resolve(inputs);
+type Inputs = Assert<Equal<typeof selectedInputs, readonly ((amount: number) => number)[]>>;
+const evaluated: readonly number[] = selectedInputs.map(input => input(2));
 // @ts-expect-error
 type ImplicitAttribute = Contribution;
 // @ts-expect-error
@@ -40,7 +42,7 @@ attribute.apply(100, selectedBudgets);
 // @ts-expect-error
 attribute.apply(100, selectedModifiers);
 // @ts-expect-error
-resolve(inputs, input => attribute.evaluate(input, { amount: 2 }));
+resolve(inputs, input => input(2));
 `);
         const program = ts.createProgram([path], {
             strict: true,

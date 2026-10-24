@@ -2,7 +2,6 @@ import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "./battlefield.js";
 import {
     createBattleState,
-    battlefieldView,
     getUnit,
     transitionUnit,
 } from "../../dist/core/tactical/battle/state.js";
@@ -142,28 +141,12 @@ export function contributionEffect(
                 ...(group === undefined
                     ? {}
                     : { group: typeof group === "function" ? group(context.self) : group }),
-                value: capability === "offense"
-                    ? dynamic
-                        ? (battle, host) => {
-                              const current = get(battle, context.ref);
-                              return current === undefined ? [] : value(current, battle, host);
-                          }
-                        : value(context.self, state, unit)
-                    : dynamic
-                    ? (query) => {
-                          const current = query.unit.effects
-                              .values()
-                              .find(
-                                  (effect) =>
-                                      effect.id === context.ref.id &&
-                                      effect.definition === content,
-                              );
-                          return current === undefined ? [] : value(current, query);
+                value: dynamic
+                    ? (battle, host) => {
+                          const current = get(battle, context.ref);
+                          return current === undefined ? [] : value(current, battle, host);
                       }
-                    : value(context.self, {
-                          unit: context.unit,
-                          battlefield: battlefieldView(state),
-                      }),
+                    : value(context.self, state, unit),
             }),
         }));
     content = definition(id, initial, {
@@ -193,9 +176,7 @@ export function refreshContribution(state, ref, content, { capability, set, valu
             ...(group === undefined
                 ? {}
                 : { group: typeof group === "function" ? group(current) : group }),
-            value: capability === "offense"
-                ? value(current, state, unit)
-                : value(current, { unit, battlefield: battlefieldView(state) }),
+            value: value(current, state, unit),
         }),
     }));
 }

@@ -1,25 +1,21 @@
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import type { Ref } from "../../../../common/ref.js";
-import { battlefieldView, updateUnit, type State as BattleState } from "../../../battle/state.js";
+import { updateUnit, type State as BattleState } from "../../../battle/state.js";
 import { effectiveMap } from "../../../battlefield/navigation/cache.js";
 import { World } from "../../../geometry/coordinate.js";
 import * as units from "../../query.js";
-import type { Context } from "../../query.js";
 import type { Unit } from "../../unit.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as attribute from "../../contribution/attribute.js";
 import { isSpatiallyPresent } from "../presence/capability.js";
-import type { Locomotion, MovementContext, MovementTarget, State } from "./capability.js";
+import type { Input, Locomotion, MovementContext, MovementTarget, State } from "./capability.js";
 import { calculate as avoidance } from "./avoidance.js";
 import { reflect } from "./motion.js";
 import { integrate } from "./steering.js";
 
 export { setRule, removeRule } from "./capability.js";
 
-export function setSpeedContribution(
-    state: State,
-    entry: contribution.Contribution<attribute.Input<Context>>,
-): State {
+export function setSpeedContribution(state: State, entry: contribution.Contribution<Input>): State {
     const speed = contribution.set(state.speed, entry);
 
     return speed === state.speed ? state : { ...state, speed };
@@ -35,7 +31,7 @@ function canMove(battle: BattleState, self: Unit & Locomotion): boolean {
     return self.locomotion.rules.every((rule) => rule.allows(battle, self));
 }
 
-function resolveSpeed(self: Unit & Locomotion, context: Context): number {
+function resolveSpeed(battle: BattleState, self: Unit & Locomotion): number {
     const definition = self.definition.locomotion;
 
     return Math.max(
@@ -44,7 +40,7 @@ function resolveSpeed(self: Unit & Locomotion, context: Context): number {
             definition.speed,
             contribution
                 .resolve(self.locomotion.speed)
-                .flatMap((value) => attribute.evaluate(value, context)),
+                .flatMap((input) => (typeof input === "function" ? input(battle, self) : input)),
         ),
     );
 }
@@ -61,10 +57,8 @@ export function advance(
         return battle;
     }
 
-    const battlefield = battlefieldView(battle);
-
     assertNonnegativeNumber(context.speedMultiplier, "speedMultiplier");
-    const speed = resolveSpeed(self, { unit: self, battlefield }) * context.speedMultiplier;
+    const speed = resolveSpeed(battle, self) * context.speedMultiplier;
     assertNonnegativeNumber(speed, "movement budget");
 
     if (speed === 0) {

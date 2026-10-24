@@ -1,3 +1,4 @@
+import { resolveDefense } from "../../dist/core/tactical/unit/capability/vitality/query.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { deadline, setDeadline } from "../../dist/core/tactical/unit/effect/effect.js";
 import { test } from "node:test";
@@ -19,7 +20,6 @@ import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/
 import {
     setDefenseContribution,
     removeDefenseContribution,
-    resolveDefense,
 } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import {
     contributionEffect,
@@ -69,7 +69,7 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
             definition: { id: "receiver", vitality: { maxHp: 100, defense: 100, resistance: 0 } },
         }),
     );
-    const original = battlefieldView(work);
+    const original = work;
     const apply = (source, defenseRatio, expiresAtTick, tick) => {
         const current = getUnit(work, 0).effects?.values().find(
             (instance) => instance.definition === program && instance.status !== "ENDING",
@@ -97,7 +97,7 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
     };
     const effective = () => {
         const unit = getUnit(work, 0);
-        return resolveDefense(unit.vitality, unit.definition.vitality, { unit, battlefield: battlefieldView(work) }).defense;
+        return resolveDefense(work, unitRef(unit)).defense;
     };
     apply(10, 0.2, 10, 0);
     close(effective(), 120);
@@ -128,8 +128,8 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
     close(effective(), 200);
     work = effects.end(work, address);
     assert.equal(effective(), 100);
-    const originalUnit = original.getUnit(0);
-    assert.equal(resolveDefense(originalUnit.vitality, originalUnit.definition.vitality, { unit: originalUnit, battlefield: original }).defense, 100);
+    const originalUnit = getUnit(original, 0);
+    assert.equal(resolveDefense(original, unitRef(originalUnit)).defense, 100);
     assert.equal(starts, 1);
     instance = getUnit(work, 0).effects.values().toArray()[0];
     assert.equal(instance, undefined);
